@@ -1,0 +1,84 @@
+# ==========================================================================================
+# Project-tracked Claude Code agent definitions (user-level .claude/ stays ignored globally).
+# ==========================================================================================
+!.claude/
+!.claude/agents/
+!.claude/agents/*.md
+.claude/settings.local.json
+
+# ==========================================================================================
+# Bot secrets and runtime data
+# ==========================================================================================
+.env
+auth-cache/
+logs/
+memory/
+
+# ==========================================================================================
+# Go transport binary (built from source, not committed)
+# ==========================================================================================
+transport/bedrock-transport
+
+# ==========================================================================================
+# Node.js
+# ==========================================================================================
+node_modules/
+package-lock.json
+
+# ==========================================================================================
+# macOS section
+# https://github.com/github/gitignore/blob/master/Global/macOS.gitignore
+# ==========================================================================================
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+Brewfile.lock.json
+
+# ==========================================================================================
+# Windows section
+# https://github.com/github/gitignore/blob/main/Global/Windows.gitignore
+# ==========================================================================================
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# ==========================================================================================
+# Linux section
+# https://github.com/github/gitignore/blob/main/Global/Linux.gitignore
+# ==========================================================================================
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ==========================================================================================
+# IDE
+# ==========================================================================================
+.vscode/
+.idea/
+*.code-workspace
