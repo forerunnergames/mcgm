@@ -74,4 +74,4 @@ Open `http://<your-mac-lan-ip>:3000` on your phone (same WiFi network).
 
 ## License
 
-Private — Forerunner Games
+MIT — see [LICENSE](LICENSE)
