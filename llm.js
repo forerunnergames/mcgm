@@ -48,17 +48,23 @@ Authorization: only ".knightofiam85" (Aaron) can trigger tools. Other players ge
 The operator often messages from a PHONE, not in-game. If get_player_position fails for ".knightofiam85", the operator is on their phone — use the BOT's position or ask for coords. Never refuse because the operator isn't in-game.
 
 Tool selection guide:
-- "give gear/armor/weapons" → equip_player (handles enchantments, slots, everything)
+- "give gear/armor/weapons/kit" → kit (predefined loadouts: max, levels 1-5, overworld_pvp, underwater, lava, elytra, nether) or equip_player
+- "buff/debuff/make invincible/make weak" → buff_debuff (levels 1-5, or clear)
 - "replace/convert blocks" → replace_blocks_in_area (handles chunk loading, block tags, tiling)
 - "teleport to/find structure/biome" → locate_and_teleport (handles /locate, dimension, tp)
+- "start new game/move everyone" → start_session (relocates game to new area with GM platform)
 - "plant trees" → plant_trees (handles ground prep, /place feature)
 - "place/generate a structure" → place_structure (trial chambers, villages, monuments, etc.)
-- "scatter random blocks" → scatter_blocks (server-side random coords, instant)
+- "scatter random blocks/decorations" → scatter_blocks (ground-level by default, NOT for building)
 - "scan what blocks are here" → scan_area (ONLY for conversion tasks, NOT for building)
-- "sleep/leave/bed" → leave_for_sleep (disconnects 25s so players can skip night). After this tool returns, you are ALREADY BACK — don't say "I'll be back soon."
-- Building custom structures → batch_commands (auto-tiles oversized fills, auto-corrects block names)
+- "sleep/leave/bed" → leave_for_sleep
+- Building/constructing rooms, structures, geodes, arenas, etc. → batch_commands with fill/setblock (use hollow fills for rooms, layered fills for walls/floors/ceilings)
 - Single blocks/details → setblock
 - Arbitrary commands → run_command
+
+BUILDING RULES: When building structures (rooms, geodes, arenas, houses, etc.), use batch_commands with fill/setblock. Build ON THE GROUND, not floating in air. Use the player's Y coordinate or ~64 for ground level. Build hollow structures with fill ... hollow. Never use scatter_blocks for construction — it creates random floating blocks.
+
+Paper 26.1.1 syntax: attribute names dropped "generic." prefix — use "minecraft:max_health" not "minecraft:generic.max_health". To strike with lightning, use "summon minecraft:lightning_bolt <x> <y> <z>" — do NOT place lightning_rod blocks.
 
 When building or modifying: ALWAYS include the bounding box coordinates in your reply so the operator can verify on BlueMap and request undo.
 
@@ -79,7 +85,7 @@ const TOOLS = [
       type: 'object',
       properties: {
         player: { type: 'string', description: 'Player name (e.g. .knightofiam85, _FlameFrags__)' },
-        tier: { type: 'string', enum: ['netherite', 'diamond', 'iron'], description: 'Gear tier. Default netherite.' },
+        tier: { type: 'string', enum: ['netherite', 'diamond', 'iron', 'leather'], description: 'Gear tier. Default netherite.' },
         items: {
           type: 'array', items: { type: 'string' },
           description: 'Which items to equip. Options: helmet, chestplate, leggings, boots, sword, pickaxe, axe, shovel, bow, shield, totem, elytra, fireworks, trident. Default: full armor + sword + pickaxe + shield.',
@@ -113,7 +119,7 @@ const TOOLS = [
       type: 'object',
       properties: {
         target: { type: 'string', description: 'What to find (natural language, e.g. "village", "ocean monument", "deep dark", "cherry grove", "nether fortress")' },
-        players: { type: 'string', description: 'Who to teleport. Use "@a" for everyone, or a specific player name. Default "@a".' },
+        players: { type: 'string', description: 'Who to teleport. Use "@a" for everyone, or one or more player names separated by commas (e.g. "_FlameFrags__,ThePro261"). All players land at the SAME spot. Default "@a".' },
       },
       required: ['target'],
     },
@@ -159,6 +165,17 @@ const TOOLS = [
         dimension: { type: 'string', description: 'Dimension. Omit for overworld.' },
       },
       required: ['structure', 'x', 'y', 'z'],
+    },
+  },
+  {
+    name: 'get_death_location',
+    description: 'Get where a player last died. Returns coordinates and dimension. Use when someone says "where did I die", "take me to my death", "go back to where I died", etc. Can also teleport them there.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        player: { type: 'string', description: 'Player name' },
+      },
+      required: ['player'],
     },
   },
   // === LOW-LEVEL TOOLS (use when high-level tools don't cover the need) ===
@@ -321,6 +338,8 @@ async function executeTool(name, input) {
         return await tools.equipPlayer(input.player, input.tier || 'netherite', input.items);
       case 'scan_area':
         return await tools.scanArea(input.center_x, input.center_z, input.radius, input.dimension);
+      case 'get_death_location':
+        return await tools.getDeathLocation(input.player);
       case 'place_structure':
         return await tools.placeStructure(input.structure, input.x, input.y, input.z, input.dimension);
       case 'replace_blocks_in_area':
