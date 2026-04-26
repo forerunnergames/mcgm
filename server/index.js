@@ -8,16 +8,23 @@ const executor = require('./executor');
 const chunkLoader = require('./chunk-loader');
 const logReader = require('./log-reader');
 const { qualify } = require('../minecraft/registry');
+const { fixCommand } = require('../minecraft/fix-command');
 
 // ============================================================================
 // High-level command helpers (convenience wrappers)
 // ============================================================================
 
 async function runCommand(command, opts = {}) {
-  if (opts.captureOutput) {
-    return logReader.runAndCapture(command, opts);
+  // Fix common mistakes (old attribute names, missing minecraft: prefix, etc.)
+  // This ensures even raw run_command fallback commands get corrected.
+  const fixed = fixCommand(command);
+  if (fixed !== command) {
+    console.log(`[server] auto-fixed command: ${command.slice(0, 60)} → ${fixed.slice(0, 60)}`);
   }
-  return api.sendCommand(command);
+  if (opts.captureOutput) {
+    return logReader.runAndCapture(fixed, opts);
+  }
+  return api.sendCommand(fixed);
 }
 
 async function setBlock(x, y, z, block, dimension) {

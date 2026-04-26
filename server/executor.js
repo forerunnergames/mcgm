@@ -10,6 +10,7 @@ const chunkLoader = require('./chunk-loader');
 const { classify, isBatchSafe, extractFillBounds } = require('../minecraft/command');
 const { normalizeCommands } = require('../minecraft/normalize');
 const { isValidEntity } = require('../minecraft/registry');
+const { fixCommand } = require('../minecraft/fix-command');
 
 let batchCounter = 0;
 let currentBatchAborted = false;
@@ -101,7 +102,8 @@ async function executeBatch(commands) {
   const errors = [];
 
   for (const cmd of individualCmds) {
-    const result = await api.sendCommand(cmd.raw);
+    const fixed = fixCommand(cmd.raw);
+    const result = await api.sendCommand(fixed);
     if (result.ok) {
       succeeded++;
     } else {
@@ -146,7 +148,10 @@ async function executeBatch(commands) {
     batchCounter++;
     currentBatchAborted = false;
     const funcName = `batch_${batchCounter}`;
-    const funcContent = batchCmds.map(c => c.raw.startsWith('/') ? c.raw.slice(1) : c.raw).join('\n') + '\n';
+    const funcContent = batchCmds.map(c => {
+      const raw = c.raw.startsWith('/') ? c.raw.slice(1) : c.raw;
+      return fixCommand(raw);
+    }).join('\n') + '\n';
 
     // Ensure datapack exists (may be missing after world reset)
     const mcmeta = JSON.stringify({ pack: { pack_format: 71, description: 'Claude bot batch commands' } });
