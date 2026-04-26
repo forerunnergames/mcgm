@@ -68,6 +68,14 @@ function fixCommand(cmd) {
     }
   }
 
+  // Auto-upgrade plain firework_rocket to distance 3 (nobody wants distance 1 with elytra)
+  if (fixed.includes('minecraft:firework_rocket') && !fixed.includes('flight_duration')) {
+    fixed = fixed.replace(
+      /minecraft:firework_rocket(?!\[)/g,
+      'minecraft:firework_rocket[minecraft:fireworks={flight_duration:3}]',
+    );
+  }
+
   // Ensure minecraft: prefix on effect names in effect commands
   const effectMatch = fixed.match(/^((?:execute .+ run )?effect (?:give|clear) \S+ )([a-z_]+)(\s|$)/);
   if (effectMatch && !effectMatch[2].includes(':')) {

@@ -18,7 +18,7 @@ const ENCHANTMENT_PRESETS = {
     shield: 'minecraft:shield[minecraft:enchantments={"minecraft:unbreaking":3,"minecraft:mending":1}]',
     totem: 'minecraft:totem_of_undying',
     elytra: 'minecraft:elytra[minecraft:enchantments={"minecraft:unbreaking":3,"minecraft:mending":1}]',
-    fireworks: 'minecraft:firework_rocket 64',
+    fireworks: 'minecraft:firework_rocket[minecraft:fireworks={flight_duration:3}] 64',
     trident: 'minecraft:trident[minecraft:enchantments={"minecraft:loyalty":3,"minecraft:unbreaking":3,"minecraft:mending":1,"minecraft:channeling":1}]',
   },
   diamond: {
