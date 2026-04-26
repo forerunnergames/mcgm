@@ -15,6 +15,7 @@ const { handleChat } = require('./llm');
 const { startWebUI, wasRecentlyEchoed } = require('./webui');
 const { setLeaveAndRejoinHandler } = require('./control');
 const bisect = require('./bisect');
+const gamemaster = require('./server/gamemaster');
 
 // Chat log file — appends every message and tool call for debugging
 const LOG_DIR = path.join(__dirname, 'logs');
@@ -115,6 +116,16 @@ async function handleEvent(evt) {
       // and rejoins, gamemode may reset, so we re-apply on every connect.
       applyPostConnectHardening().catch((e) => {
         console.error('[bot] post-connect hardening error:', e.message);
+      });
+      // Clean up stale batch files from prior sessions
+      bisect.cleanupStaleBatchFiles().catch((e) => {
+        console.warn('[bot] stale batch cleanup error:', e.message);
+      });
+      // Build the GM platform and start watching for GM joins
+      gamemaster.buildPlatform().then(() => {
+        gamemaster.startWatching();
+      }).catch((e) => {
+        console.warn('[bot] gamemaster platform error:', e.message);
       });
       return;
 

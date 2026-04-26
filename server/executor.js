@@ -15,12 +15,12 @@ let batchCounter = 0;
 let currentBatchAborted = false;
 
 // Switch player protection: the Nintendo Switch freezes when receiving thousands
-// of block-change packets in one tick. We tp the Switch player far away before
-// large operations so the changes happen outside their render distance, then
-// bring them back after.
-const SWITCH_PLAYER = process.env.SWITCH_PLAYER || '.knightofiam85';
+// of block-change packets in one tick. We tp the Switch player to the GM platform
+// (glass platform at height limit above spawn) before large operations, then
+// bring them back after. The platform is far enough above ground that block
+// changes below don't reach render distance.
+const SWITCH_PLAYER = process.env.SWITCH_PLAYER || process.env.AUTHORIZED_OP || '.knightofiam85';
 const SWITCH_PROTECTION_THRESHOLD = 50; // block commands that trigger protection
-const SWITCH_SAFE_POS = { x: 29999, y: 200, z: 29999 }; // far corner, high up
 
 /**
  * Execute a single command with optional output capture.
@@ -132,8 +132,10 @@ async function executeBatch(commands) {
         const pos = await getPlayerPositionAndDimension(SWITCH_PLAYER);
         if (pos.ok) {
           switchPlayerSaved = pos;
-          console.log(`[executor] switch protection: moving ${SWITCH_PLAYER} away (${blockCmdCount} block cmds)`);
-          await api.sendCommand(`tp ${SWITCH_PLAYER} ${SWITCH_SAFE_POS.x} ${SWITCH_SAFE_POS.y} ${SWITCH_SAFE_POS.z}`);
+          const gm = require('./gamemaster');
+          const safePos = gm.GM_SPAWN;
+          console.log(`[executor] switch protection: moving ${SWITCH_PLAYER} to GM platform (${blockCmdCount} block cmds)`);
+          await api.sendCommand(`tp ${SWITCH_PLAYER} ${safePos.x} ${safePos.y} ${safePos.z}`);
           await new Promise(r => setTimeout(r, 500));
         }
       } catch (e) {
@@ -180,17 +182,26 @@ async function executeBatch(commands) {
       console.warn(`[executor] cleanup failed for ${funcName}:`, e.message);
     }
 
-    // Switch protection: tp the Switch player back to their original position
+    // Switch protection: leave the GM on the platform (their home base).
+    // The platform is safe and they can see everything from up there.
+    // Only tp them back if they were NOT already on/near the platform.
     if (switchPlayerSaved) {
       try {
-        // Wait a beat for the server to finish processing block changes
-        await new Promise(r => setTimeout(r, 1500));
         const coords = switchPlayerSaved.position.match(/-?\d+\.\d+/g);
         if (coords && coords.length >= 3) {
-          const [px, py, pz] = coords.map(c => Math.floor(parseFloat(c)));
-          const dp = chunkLoader.dimPrefix(switchPlayerSaved.dimension);
-          await api.sendCommand(`${dp}tp ${SWITCH_PLAYER} ${px} ${py} ${pz}`);
-          console.log(`[executor] switch protection: returned ${SWITCH_PLAYER} to ${px} ${py} ${pz}`);
+          const origY = parseFloat(coords[1]);
+          const gm = require('./gamemaster');
+          // If they were already near the platform (within 20 blocks), leave them there
+          if (Math.abs(origY - gm.PLATFORM.y) > 20) {
+            // They were on the ground — wait for block changes to settle, then return them
+            await new Promise(r => setTimeout(r, 2000));
+            const [px, py, pz] = coords.map(c => Math.floor(parseFloat(c)));
+            const dp = chunkLoader.dimPrefix(switchPlayerSaved.dimension);
+            await api.sendCommand(`${dp}tp ${SWITCH_PLAYER} ${px} ${py} ${pz}`);
+            console.log(`[executor] switch protection: returned ${SWITCH_PLAYER} to ${px} ${py} ${pz}`);
+          } else {
+            console.log(`[executor] switch protection: ${SWITCH_PLAYER} stays on platform`);
+          }
         }
       } catch (e) {
         console.warn(`[executor] switch protection: failed to return player:`, e.message);
