@@ -16,6 +16,7 @@ const { startWebUI, wasRecentlyEchoed } = require('./webui');
 const { setLeaveAndRejoinHandler } = require('./control');
 const server = require('./server');
 const gamemaster = require('./server/gamemaster');
+const deathTracker = require('./server/death-tracker');
 
 // Chat log file — appends every message and tool call for debugging
 const LOG_DIR = path.join(__dirname, 'logs');
@@ -132,6 +133,8 @@ async function handleEvent(evt) {
       }).catch((e) => {
         console.warn('[bot] gamemaster platform error:', e.message);
       });
+      // Start death tracker
+      deathTracker.startWatching();
       return;
 
     case 'chat': {
