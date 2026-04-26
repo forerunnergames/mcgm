@@ -1,16 +1,17 @@
-// Thin HTTP client for the Bisect/Pterodactyl API.
+// Thin HTTP client for the Pterodactyl panel API.
 // Zero game logic — just sends HTTP requests and returns responses.
 
 'use strict';
 
 require('dotenv').config();
 
-const API_BASE = process.env.BISECT_API_BASE;
-const API_KEY = process.env.BISECT_API_KEY;
-const SERVER_ID = process.env.BISECT_SERVER_ID;
+// Support both new PANEL_* and legacy BISECT_* env var names for migration.
+const API_BASE = process.env.PANEL_API_BASE || process.env.BISECT_API_BASE;
+const API_KEY = process.env.PANEL_API_KEY || process.env.BISECT_API_KEY;
+const SERVER_ID = process.env.PANEL_SERVER_ID || process.env.BISECT_SERVER_ID;
 
 if (!API_KEY || !SERVER_ID || !API_BASE) {
-  throw new Error('BISECT_API_KEY, BISECT_SERVER_ID, BISECT_API_BASE must be set in .env');
+  throw new Error('PANEL_API_KEY, PANEL_SERVER_ID, PANEL_API_BASE must be set in .env (legacy BISECT_* names also accepted)');
 }
 
 const HEADERS = {

@@ -1,12 +1,11 @@
 // Chunk loading for remote Minecraft operations.
 // Teleports the bot and forceloads chunks to ensure commands work in unloaded areas.
-// Single implementation — replaces duplicated logic in bisect.js and tools.js.
 
 'use strict';
 
 const api = require('./api');
 
-const BOT_NAME = '.knightofiam1294';
+const BOT_NAME = process.env.BOT_NAME || '.bot';
 
 /**
  * Ensure chunks are loaded around a bounding box.

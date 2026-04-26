@@ -14,7 +14,7 @@ const readline = require('readline');
 const { handleChat } = require('./llm');
 const { startWebUI, wasRecentlyEchoed } = require('./webui');
 const { setLeaveAndRejoinHandler } = require('./control');
-const bisect = require('./bisect');
+const server = require('./server');
 const gamemaster = require('./server/gamemaster');
 
 // Chat log file — appends every message and tool call for debugging
@@ -31,7 +31,12 @@ function chatLog(line) {
 
 // Matches messages that explicitly address the bot.
 // We use \b word boundaries so "cloud" and "donation" don't trigger.
-const BOT_MENTION = /\b(claude|donut1500|donut|knightofiam1294)\b/i;
+// Build the mention regex dynamically from BOT_NAME env var.
+// Always matches "claude"; also matches the configured bot gamertag (minus leading dot).
+const _botTag = (process.env.BOT_NAME || '').replace(/^\./, '');
+const _mentionParts = ['claude'];
+if (_botTag) _mentionParts.push(_botTag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+const BOT_MENTION = new RegExp(`\\b(${_mentionParts.join('|')})\\b`, 'i');
 function isAddressedToBot(message) {
   return BOT_MENTION.test(message);
 }
@@ -112,13 +117,13 @@ async function handleEvent(evt) {
       // Post-connect hardening: make the bot invincible and immune to all
       // hostile state so it can never die and enter the broken "dead player"
       // state that Paper reports as "Chat disabled in client options". Also
-      // protects Jacob's real player data — every time the bot disconnects
+      // Protects the bot's player data — every time the bot disconnects
       // and rejoins, gamemode may reset, so we re-apply on every connect.
       applyPostConnectHardening().catch((e) => {
         console.error('[bot] post-connect hardening error:', e.message);
       });
       // Clean up stale batch files from prior sessions
-      bisect.cleanupStaleBatchFiles().catch((e) => {
+      server.cleanupStaleBatchFiles().catch((e) => {
         console.warn('[bot] stale batch cleanup error:', e.message);
       });
       // Build the GM platform and start watching for GM joins
@@ -184,7 +189,7 @@ async function applyPostConnectHardening() {
   ];
   for (const cmd of cmds) {
     try {
-      await bisect.runCommand(cmd);
+      await server.runCommand(cmd);
     } catch (e) {
       console.error(`[bot] hardening cmd failed (${cmd}):`, e.message);
     }

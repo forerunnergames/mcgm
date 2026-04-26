@@ -102,7 +102,7 @@
     "_note": "55 tree-related features. Use with /place feature"
   },
   "block_renames": {
-    "_note": "Old name → current valid name. Applied automatically by bisect.js normalizer.",
+    "_note": "Old name → current valid name. Applied automatically by the block normalizer.",
     "minecraft:grass": "minecraft:short_grass",
     "minecraft:short_grass_block": "minecraft:short_grass",
     "minecraft:tall_grass_block": "minecraft:tall_grass",

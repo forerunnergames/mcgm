@@ -70,7 +70,7 @@ async function getPlayerPositionAndDimension(player) {
   if (!pos) {
     return {
       ok: false,
-      error: `Could not find player "${player}". The name must be the EXACT in-game name (case-sensitive, including dots and underscores). Use list_online_players to see exact names. Common mistake: using a nickname like "Andrew" instead of the in-game name like "_FlameFrags__".`,
+      error: `Could not find player "${player}". The name must be the EXACT in-game name (case-sensitive, including dots and underscores). Use list_online_players to see exact names. Common mistake: using a nickname instead of the exact in-game name.`,
     };
   }
   return { ok: true, position: pos, dimension: dim || 'minecraft:overworld' };

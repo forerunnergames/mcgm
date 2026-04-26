@@ -6,7 +6,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const Anthropic = require('@anthropic-ai/sdk').default;
-const bisect = require('./bisect');
+const server = require('./server');
 const { requestLeaveAndRejoin } = require('./control');
 const tools = require('./tools');
 
@@ -30,7 +30,7 @@ function buildNicknamePrompt() {
   return `
 Player nickname mappings (ALWAYS use the EXACT in-game name for tool calls, never the nickname):
 ${lines.join('\n')}
-When a player or the operator refers to someone by nickname (e.g. "Andrew"), you MUST resolve it to the exact in-game name (e.g. "_FlameFrags__") before passing it to any tool. The /data get entity command is case-sensitive and requires the exact name including underscores and dots. Use these nicknames in your chat responses to sound natural (call them by their real name, not their gamertag).
+When a player or the operator refers to someone by nickname, you MUST resolve it to the exact in-game name before passing it to any tool. The /data get entity command is case-sensitive and requires the exact name including underscores and dots. Use these nicknames in your chat responses to sound natural (call them by their real name, not their gamertag).
 If someone mentions a name you don't recognize, call list_online_players to find the closest match.`;
 }
 
@@ -38,14 +38,16 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const MODEL = process.env.LLM_MODEL || 'claude-sonnet-4-5';
 const AUTHORIZED_OP = process.env.AUTHORIZED_OP || '';
 
+const BOT_IGN = process.env.BOT_NAME || '.bot';
+
 function getSystemPrompt() {
-  return `You are Claude, a friendly Minecraft builder bot on a Paper 26.1.1 server. Your in-game name is ".knightofiam1294".
+  return `You are Claude, a friendly Minecraft builder bot on a Paper 26.1.1 server. Your in-game name is "${BOT_IGN}".
 
 Chat: messages arrive as "[sender] text". Keep replies SHORT (1-2 sentences, under 200 chars). Be friendly and playful.
 
-Authorization: only ".knightofiam85" (Aaron) can trigger tools. Other players get conversation only — tell them only Aaron can give you orders.
+Authorization: only "${AUTHORIZED_OP}" (the operator) can trigger tools. Other players get conversation only — tell them only the operator can give you orders.
 
-The operator often messages from a PHONE, not in-game. If get_player_position fails for ".knightofiam85", the operator is on their phone — use the BOT's position or ask for coords. Never refuse because the operator isn't in-game.
+The operator often messages from a PHONE, not in-game. If get_player_position fails for "${AUTHORIZED_OP}", the operator is on their phone — use the BOT's position or ask for coords. Never refuse because the operator isn't in-game.
 
 Tool selection guide:
 - "give gear/armor/weapons/kit" → kit (predefined loadouts: max, levels 1-5, overworld_pvp, underwater, lava, elytra, nether) or equip_player
@@ -119,7 +121,7 @@ const TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        player: { type: 'string', description: 'Player name (e.g. .knightofiam85). Bedrock players have a leading dot.' },
+        player: { type: 'string', description: 'Player name (e.g. .player1). Bedrock players have a leading dot.' },
         item: { type: 'string', description: 'Item ID like minecraft:diamond' },
         count: { type: 'integer', description: 'How many (default 1, max 64 for stackable)' },
       },
@@ -173,7 +175,7 @@ const TOOLS = [
   },
   {
     name: 'run_command',
-    description: 'Run an arbitrary slash command as the server console (full op privileges). The response includes the last ~40 lines of server log captured ~1 second after the command ran, so you CAN see the output of commands like `/spark health`, `/list`, `/tps`, `/say`, etc. Use this for things not covered by other tools. Examples: "time set day", "weather clear", "gamemode creative .knightofiam85", "spark health" (prints a full server health report), "spark tps". When interpreting output, scan the log tail for lines that appear to be responses to your command.',
+    description: 'Run an arbitrary slash command as the server console (full op privileges). The response includes the last ~40 lines of server log captured ~1 second after the command ran, so you CAN see the output of commands like `/spark health`, `/list`, `/tps`, `/say`, etc. Use this for things not covered by other tools. Examples: "time set day", "weather clear", "gamemode creative .player1", "spark health" (prints a full server health report), "spark tps". When interpreting output, scan the log tail for lines that appear to be responses to your command.',
     input_schema: {
       type: 'object',
       properties: {
@@ -244,27 +246,27 @@ async function executeTool(name, input) {
     // Low-level tools that aren't in tools/ directory
     switch (name) {
       case 'setblock':
-        return await bisect.setBlock(input.x, input.y, input.z, input.block, input.dimension);
+        return await server.setBlock(input.x, input.y, input.z, input.block, input.dimension);
       case 'fill':
-        return await bisect.fillBlocks(input.x1, input.y1, input.z1, input.x2, input.y2, input.z2, input.block, input.mode || 'replace', input.dimension);
+        return await server.fillBlocks(input.x1, input.y1, input.z1, input.x2, input.y2, input.z2, input.block, input.mode || 'replace', input.dimension);
       case 'give_item':
-        return await bisect.giveItem(input.player, input.item, input.count || 1);
+        return await server.giveItem(input.player, input.item, input.count || 1);
       case 'teleport_player':
-        return await bisect.teleport(input.player, input.x, input.y, input.z, input.dimension);
+        return await server.teleport(input.player, input.x, input.y, input.z, input.dimension);
       case 'get_player_position':
-        return await bisect.getPlayerPositionAndDimension(input.player);
+        return await server.getPlayerPositionAndDimension(input.player);
       case 'list_online_players':
-        return await bisect.listPlayers();
+        return await server.listPlayers();
       case 'summon':
-        return await bisect.summon(input.entity, input.x, input.y, input.z, input.nbt, input.count || 1, input.dimension);
+        return await server.summon(input.entity, input.x, input.y, input.z, input.nbt, input.count || 1, input.dimension);
       case 'scatter_blocks':
-        return await bisect.scatterBlocks(input.block, input.count, input.center_x, input.center_z, input.radius, input.min_y, input.max_y, input.dimension);
+        return await server.scatterBlocks(input.block, input.count, input.center_x, input.center_z, input.radius, input.min_y, input.max_y, input.dimension);
       case 'batch_commands':
-        return await bisect.executeBatch(input.commands);
+        return await server.executeBatch(input.commands);
       case 'run_command':
-        return await bisect.runCommand(input.command, { captureOutput: true });
+        return await server.runCommand(input.command, { captureOutput: true });
       case 'get_server_stats':
-        return await bisect.getServerStats();
+        return await server.getServerStats();
       case 'leave_for_sleep': {
         const r = await requestLeaveAndRejoin(input.delay_seconds || 25);
         if (r && r.ok) {

@@ -7,8 +7,9 @@
 const fs = require('fs');
 const path = require('path');
 const api = require('./api');
+const { BOT_NAME } = require('./chunk-loader');
 
-const GM_PLAYER = process.env.AUTHORIZED_OP || '.knightofiam85';
+const GM_PLAYER = process.env.AUTHORIZED_OP || '.operator';
 const STATE_FILE = path.join(__dirname, '..', 'memory', 'gm-state.json');
 
 // ============================================================================
@@ -50,7 +51,7 @@ async function buildPlatformAt(cx, cz, y, dimension) {
     ? `execute in ${dimension} run ` : '';
 
   // Chunk loading
-  await api.sendCommand(`${dp}tp .knightofiam1294 ${cx} ${y} ${cz}`);
+  await api.sendCommand(`${dp}tp ${BOT_NAME} ${cx} ${y} ${cz}`);
   await api.sendCommand(`${dp}forceload add ${cx - radius} ${cz - radius} ${cx + radius} ${cz + radius}`);
   await new Promise(r => setTimeout(r, 2000));
 
@@ -105,10 +106,10 @@ async function relocateSession(x, z, dimension, players, opts = {}) {
   await buildPlatformAt(x, z, platformY, dimension);
 
   // 2. Find safe ground Y using spreadplayers on the bot
-  await api.sendCommand(`${dp}spreadplayers ${x} ${z} 0 1 false .knightofiam1294`);
+  await api.sendCommand(`${dp}spreadplayers ${x} ${z} 0 1 false ${BOT_NAME}`);
   await new Promise(r => setTimeout(r, 1000));
   const { getPlayerPositionAndDimension } = require('./log-reader');
-  const botPos = await getPlayerPositionAndDimension('.knightofiam1294');
+  const botPos = await getPlayerPositionAndDimension(BOT_NAME);
   let safeGroundY = groundY;
   if (botPos.ok && botPos.position) {
     const coords = botPos.position.match(/-?\d+\.\d+/g);

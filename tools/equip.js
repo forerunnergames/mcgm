@@ -61,7 +61,7 @@ const schema = {
   input_schema: {
     type: 'object',
     properties: {
-      player: { type: 'string', description: 'Player name (e.g. .knightofiam85, _FlameFrags__)' },
+      player: { type: 'string', description: 'Player name (e.g. .player1, .player2)' },
       tier: { type: 'string', enum: ['netherite', 'diamond', 'iron', 'leather'], description: 'Gear tier. Default netherite.' },
       items: {
         type: 'array', items: { type: 'string' },

@@ -20,7 +20,7 @@ let currentBatchAborted = false;
 // (glass platform at height limit above spawn) before large operations, then
 // bring them back after. The platform is far enough above ground that block
 // changes below don't reach render distance.
-const SWITCH_PLAYER = process.env.SWITCH_PLAYER || process.env.AUTHORIZED_OP || '.knightofiam85';
+const SWITCH_PLAYER = process.env.SWITCH_PLAYER || process.env.AUTHORIZED_OP || '';
 const SWITCH_PROTECTION_THRESHOLD = 50; // block commands that trigger protection
 
 /**

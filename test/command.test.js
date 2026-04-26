@@ -23,31 +23,31 @@ describe('classify', () => {
   });
 
   it('classifies effect as player', () => {
-    const cmd = classify('effect give .knightofiam85 minecraft:resistance infinite 4 true');
+    const cmd = classify('effect give .player1 minecraft:resistance infinite 4 true');
     assert.equal(cmd.type, 'effect');
     assert.equal(cmd.category, 'player');
   });
 
   it('classifies attribute as player', () => {
-    const cmd = classify('attribute .knightofiam85 minecraft:max_health base set 1024');
+    const cmd = classify('attribute .player1 minecraft:max_health base set 1024');
     assert.equal(cmd.type, 'attribute');
     assert.equal(cmd.category, 'player');
   });
 
   it('classifies item replace as player', () => {
-    const cmd = classify('item replace entity .knightofiam85 armor.head with minecraft:netherite_helmet[minecraft:enchantments={"minecraft:protection":4}]');
+    const cmd = classify('item replace entity .player1 armor.head with minecraft:netherite_helmet[minecraft:enchantments={"minecraft:protection":4}]');
     assert.equal(cmd.type, 'item');
     assert.equal(cmd.category, 'player');
   });
 
   it('classifies give as player', () => {
-    const cmd = classify('give .knightofiam85 minecraft:diamond 64');
+    const cmd = classify('give .player1 minecraft:diamond 64');
     assert.equal(cmd.type, 'give');
     assert.equal(cmd.category, 'player');
   });
 
   it('classifies tp as player', () => {
-    const cmd = classify('tp .knightofiam85 100 65 200');
+    const cmd = classify('tp .player1 100 65 200');
     assert.equal(cmd.type, 'tp');
     assert.equal(cmd.category, 'player');
   });

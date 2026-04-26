@@ -813,11 +813,11 @@ Natural language examples you can say to the bot, organized by what you want to 
 
 ### Equipping & Gear
 - "Give me full netherite gear"
-- "Equip Aaron with diamond armor and a sword"
+- "Equip the operator with diamond armor and a sword"
 - "Give me iron armor"
 - "Give me leather gear"
 - "Give me just a netherite pickaxe and elytra with fireworks"
-- "Give Aaron 64 golden apples"
+- "Give the operator 64 golden apples"
 - "Give me a stack of ender pearls"
 - "Give me a diamond sword with sharpness 5 and fire aspect 2"
 
@@ -849,7 +849,7 @@ Natural language examples you can say to the bot, organized by what you want to 
 - "Summon a wither"
 - "Spawn 100 chickens"
 - "Summon an ender dragon"
-- "Spawn a bunch of zombies around Aaron"
+- "Spawn a bunch of zombies around the operator"
 - "Summon an iron golem"
 - "Spawn some wolves"
 - "Summon a warden"
@@ -859,11 +859,11 @@ Natural language examples you can say to the bot, organized by what you want to 
 - "Give me night vision"
 - "Make me invisible"
 - "Give me speed 5 for 10 minutes"
-- "Apply strength 2 to Aaron"
+- "Apply strength 2 to the operator"
 - "Give me slow falling"
-- "Poison Aaron"
+- "Poison the operator"
 - "Give me resistance and regeneration"
-- "Make Aaron glow"
+- "Make the operator glow"
 - "Give me haste 3"
 - "Remove all effects from me"
 
@@ -890,16 +890,16 @@ Natural language examples you can say to the bot, organized by what you want to 
 - "Put me in creative mode"
 
 ### Trolling & Chaos
-- "Replace the ground under Aaron with lava"
-- "Surround Aaron with bedrock"
+- "Replace the ground under the operator with lava"
+- "Surround the operator with bedrock"
 - "Spawn 50 withers"
-- "Replace all the blocks around Aaron with TNT and light it"
-- "Fill Aaron's area with cobwebs"
-- "Give Aaron blindness and slowness"
-- "Remove the floor beneath Aaron"
-- "Replace all air around Aaron with water"
-- "Spawn a warden on top of Aaron"
-- "Take away all of Aaron's effects and give him hunger and weakness"
+- "Replace all the blocks around the operator with TNT and light it"
+- "Fill the operator's area with cobwebs"
+- "Give the operator blindness and slowness"
+- "Remove the floor beneath the operator"
+- "Replace all air around the operator with water"
+- "Spawn a warden on top of the operator"
+- "Take away all of the operator's effects and give him hunger and weakness"
 
 ### Scanning & Information
 - "Scan the area and tell me what's here"

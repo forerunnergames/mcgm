@@ -29,14 +29,14 @@ describe('normalizeCommand', () => {
 
   describe('non-block commands (should NOT normalize)', () => {
     it('does not touch effect commands', () => {
-      const raw = 'effect give .knightofiam85 minecraft:resistance infinite 4 true';
+      const raw = 'effect give .player1 minecraft:resistance infinite 4 true';
       const result = normalizeCommand(raw);
       assert.equal(result.normalized, raw);
       assert.equal(result.corrections.length, 0);
     });
 
     it('does not touch attribute commands', () => {
-      const raw = 'attribute .knightofiam85 minecraft:max_health base set 1024';
+      const raw = 'attribute .player1 minecraft:max_health base set 1024';
       const result = normalizeCommand(raw);
       assert.equal(result.normalized, raw);
     });
@@ -51,7 +51,7 @@ describe('normalizeCommand', () => {
     });
 
     it('does not touch give commands', () => {
-      const raw = 'give .knightofiam85 minecraft:diamond 64';
+      const raw = 'give .player1 minecraft:diamond 64';
       const result = normalizeCommand(raw);
       assert.equal(result.normalized, raw);
     });
@@ -63,7 +63,7 @@ describe('normalizeCommand', () => {
     });
 
     it('does not touch tp commands', () => {
-      const raw = 'tp .knightofiam85 100 65 200';
+      const raw = 'tp .player1 100 65 200';
       const result = normalizeCommand(raw);
       assert.equal(result.normalized, raw);
     });

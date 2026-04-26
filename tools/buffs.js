@@ -1,5 +1,5 @@
 // Buff and debuff system �� predefined effect combos with levels 1-5.
-// "max buff Jacob" = hard to kill. "max debuff Andrew" = mining fatigue, 1/2 heart.
+// "max buff Player1" = hard to kill. "max debuff Player2" = mining fatigue, 1/2 heart.
 
 'use strict';
 

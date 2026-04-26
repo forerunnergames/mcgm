@@ -16,11 +16,11 @@
 
 const http = require('http');
 const { handleChat } = require('./llm');
-const { runCommand } = require('./bisect');
+const { runCommand } = require('./server');
 
 // Dedupe: tracks messages we just echoed to in-game chat so bot.js can drop
 // them when they come back via the Go transport's chat event stream.
-// Without this, echoing "<.knightofiam85> foo" via /tellraw would loop back
+// Without this, echoing "<.operator> foo" via /tellraw would loop back
 // through handleChat since our parser successfully extracts it as a chat.
 const recentEchoes = new Map(); // key: `${sender}|${message}` → ts
 const ECHO_TTL_MS = 15000;

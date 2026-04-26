@@ -5,6 +5,7 @@
 
 const server = require('../server');
 const { parseLocateOutput } = require('../server/log-reader');
+const { BOT_NAME } = require('../server/chunk-loader');
 const { getLocateTargets } = require('../minecraft/registry');
 
 const LOCATE_MAP = getLocateTargets();
@@ -22,7 +23,7 @@ const schema = {
     type: 'object',
     properties: {
       target: { type: 'string', description: 'What to find (natural language, e.g. "village", "ocean monument", "deep dark", "cherry grove", "nether fortress")' },
-      players: { type: 'string', description: 'Who to teleport. Use "@a" for everyone, or one or more player names separated by commas (e.g. "_FlameFrags__,ThePro261"). All players land at the SAME spot. Default "@a".' },
+      players: { type: 'string', description: 'Who to teleport. Use "@a" for everyone, or one or more player names separated by commas (e.g. ".player1,.player2"). All players land at the SAME spot. Default "@a".' },
     },
     required: ['target'],
   },
@@ -76,9 +77,9 @@ async function execute(input) {
 
   if (!hasExactY && !isUnderground) {
     // SURFACE: use spreadplayers on bot to find safe Y, then tp everyone there
-    await server.runCommand(`${dp}spreadplayers ${x} ${z} 0 1 false .knightofiam1294`);
+    await server.runCommand(`${dp}spreadplayers ${x} ${z} 0 1 false ${BOT_NAME}`);
     await new Promise(r => setTimeout(r, 500));
-    const botPos = await server.getPlayerPositionAndDimension('.knightofiam1294');
+    const botPos = await server.getPlayerPositionAndDimension(BOT_NAME);
     let safeY = 100;
     if (botPos.ok && botPos.position) {
       const coords = botPos.position.match(/-?\d+\.\d+/g);
@@ -92,7 +93,7 @@ async function execute(input) {
     // UNDERGROUND or exact Y: tp directly with air pocket
     if (!hasExactY) y = isUnderground ? -20 : 100;
     // Carve air pocket before teleporting
-    await server.runCommand(`${dp}tp .knightofiam1294 ${x} ${y} ${z}`);
+    await server.runCommand(`${dp}tp ${BOT_NAME} ${x} ${y} ${z}`);
     await new Promise(r => setTimeout(r, 1000));
     // Single unconditional air fill — no need for per-block-type fills
     await server.runCommand(`${dp}fill ${x - 1} ${y} ${z - 1} ${x + 1} ${y + 2} ${z + 1} minecraft:air`);

@@ -1,5 +1,4 @@
 // Server module — clean interface for all server operations.
-// Replaces bisect.js with separated concerns.
 
 'use strict';
 
@@ -127,7 +126,7 @@ async function getServerStats() {
 }
 
 // ============================================================================
-// Exports — matches the old bisect.js interface for backwards compatibility
+// Exports
 // ============================================================================
 
 module.exports = {
