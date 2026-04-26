@@ -17,7 +17,7 @@ const schema = {
     properties: {
       center_x: { type: 'number', description: 'Center X coordinate of the area' },
       center_z: { type: 'number', description: 'Center Z coordinate of the area' },
-      radius: { type: 'integer', description: 'Radius in blocks (max 150, default 80)' },
+      radius: { type: 'integer', description: 'Radius in blocks (default 500 for large-scale). Automatically runs multiple passes for areas larger than 150 blocks.' },
       from_block: { type: 'string', description: 'Block to replace. Use group names (wood, trees, stone, ores, flowers, ice, sand, dirt, water, lava) or specific IDs (minecraft:oak_log) or tags (#minecraft:logs)' },
       to_block: { type: 'string', description: 'Block to replace with (e.g. minecraft:glass, minecraft:lava, minecraft:air)' },
       dimension: { type: 'string', description: 'Dimension. Omit for overworld.' },
@@ -31,7 +31,7 @@ const schema = {
 async function execute(input) {
   const cx = input.center_x;
   const cz = input.center_z;
-  const radius = Math.min(input.radius || 80, 150);
+  const totalRadius = input.radius || 500; // default large-scale
   const minY = input.min_y || 50;
   const maxY = input.max_y || 120;
   const dimension = input.dimension;
@@ -41,24 +41,51 @@ async function execute(input) {
     [input.from_block.startsWith('#') || input.from_block.includes(':') ? input.from_block : `minecraft:${input.from_block}`];
   const toBlockId = input.to_block.includes(':') ? input.to_block : `minecraft:${input.to_block}`;
 
-  // Use chunk-loader (deduplicated)
-  await chunkLoader.ensureLoadedRadius(cx, cz, Math.min(radius, 100), dimension);
+  // For large areas, run multiple passes in 150-block strips
+  const PASS_RADIUS = 150;
+  let totalCommands = 0;
 
-  const cmds = [];
-  for (const from of fromBlocks) {
-    cmds.push(`${dp}fill ${cx - radius} ${minY} ${cz - radius} ${cx + radius} ${maxY} ${cz + radius} ${toBlockId} replace ${from}`);
+  if (totalRadius <= PASS_RADIUS) {
+    // Single pass — fits within one chunk-load
+    await chunkLoader.ensureLoadedRadius(cx, cz, Math.min(totalRadius, 100), dimension);
+    const cmds = [];
+    for (const from of fromBlocks) {
+      cmds.push(`${dp}fill ${cx - totalRadius} ${minY} ${cz - totalRadius} ${cx + totalRadius} ${maxY} ${cz + totalRadius} ${toBlockId} replace ${from}`);
+    }
+    const result = await server.executeBatch(cmds);
+    totalCommands = result.commands_executed;
+    await chunkLoader.cleanup(dimension);
+  } else {
+    // Multi-pass — sweep in strips from -totalRadius to +totalRadius
+    for (let offX = -totalRadius; offX < totalRadius; offX += PASS_RADIUS * 2) {
+      for (let offZ = -totalRadius; offZ < totalRadius; offZ += PASS_RADIUS * 2) {
+        const px = cx + offX + PASS_RADIUS;
+        const pz = cz + offZ + PASS_RADIUS;
+        const x1 = Math.max(cx - totalRadius, cx + offX);
+        const z1 = Math.max(cz - totalRadius, cz + offZ);
+        const x2 = Math.min(cx + totalRadius, cx + offX + PASS_RADIUS * 2 - 1);
+        const z2 = Math.min(cz + totalRadius, cz + offZ + PASS_RADIUS * 2 - 1);
+
+        await chunkLoader.ensureLoadedRadius(px, pz, PASS_RADIUS, dimension, { waitMs: 2000 });
+        const cmds = [];
+        for (const from of fromBlocks) {
+          cmds.push(`${dp}fill ${x1} ${minY} ${z1} ${x2} ${maxY} ${z2} ${toBlockId} replace ${from}`);
+        }
+        const result = await server.executeBatch(cmds);
+        totalCommands += result.commands_executed;
+        await chunkLoader.cleanup(dimension);
+      }
+    }
   }
-
-  const result = await server.executeBatch(cmds);
-  await chunkLoader.cleanup(dimension);
 
   return {
     ok: true,
-    area: { from: { x: cx - radius, z: cz - radius }, to: { x: cx + radius, z: cz + radius }, y: { min: minY, max: maxY } },
+    area: { from: { x: cx - totalRadius, z: cz - totalRadius }, to: { x: cx + totalRadius, z: cz + totalRadius }, y: { min: minY, max: maxY } },
     center: { x: cx, z: cz },
+    radius: totalRadius,
     block_types_replaced: fromBlocks,
     replaced_with: toBlockId,
-    commands: result.commands_executed,
+    commands: totalCommands,
   };
 }
 

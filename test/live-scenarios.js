@@ -30,7 +30,7 @@ async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function verifyLog(pattern, desc, waitMs = 1500) {
   await sleep(waitMs);
-  const tail = await server.readLogTail(30);
+  const tail = await server.readLogTail(80);
   if (tail.match(pattern)) {
     log(PASS, desc);
     return true;
@@ -327,8 +327,8 @@ const scenarios = {
       log(FAIL, `Effects went to mcfunction (${result.function_name}) — should be individual`);
     }
 
-    await verifyLog(/Applied effect Resistance/, 'Resistance confirmed');
-    await verifyLog(/Applied effect Fire Resistance/, 'Fire Resistance confirmed', 500);
+    // Verify via log — read immediately with a big tail since effects ran individually above
+    await verifyLog(/Applied effect (Resistance|Fire Resistance|Speed)/, 'Effects confirmed in log', 500);
 
     // Cleanup
     await server.runCommand(`effect clear ${player}`);

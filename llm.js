@@ -76,108 +76,12 @@ ${buildNicknamePrompt()}
 You have conversation memory (~40 turns). Use it — reference previous builds, coordinates, and actions when asked.`;
 }
 
+// Auto-discovered high-level tools from tools/ directory
+const toolsIndex = require('./tools/index');
+
 const TOOLS = [
-  // === HIGH-LEVEL TOOLS (prefer these over low-level ones) ===
-  {
-    name: 'equip_player',
-    description: 'Give a player a full gear set, auto-equipped to the correct armor/weapon/hotbar slots. Handles enchantment syntax and /item replace internally. Use this instead of give_item for any equipment.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        player: { type: 'string', description: 'Player name (e.g. .knightofiam85, _FlameFrags__)' },
-        tier: { type: 'string', enum: ['netherite', 'diamond', 'iron', 'leather'], description: 'Gear tier. Default netherite.' },
-        items: {
-          type: 'array', items: { type: 'string' },
-          description: 'Which items to equip. Options: helmet, chestplate, leggings, boots, sword, pickaxe, axe, shovel, bow, shield, totem, elytra, fireworks, trident. Default: full armor + sword + pickaxe + shield.',
-        },
-      },
-      required: ['player'],
-    },
-  },
-  {
-    name: 'replace_blocks_in_area',
-    description: 'Replace one block type with another in an area. Handles chunk loading, bot teleporting, forceloading, tiling, and block tags ALL automatically. Use block group names for convenience: "wood" (all planks/logs/stairs/slabs/fences/doors), "trees" (logs+leaves), "stone", "ores", "flowers", "ice", "sand", "dirt", "water", "lava", "wool", "glass". Or use specific block IDs or #tags.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        center_x: { type: 'number', description: 'Center X coordinate of the area' },
-        center_z: { type: 'number', description: 'Center Z coordinate of the area' },
-        radius: { type: 'integer', description: 'Radius in blocks (max 150, default 80)' },
-        from_block: { type: 'string', description: 'Block to replace. Use group names (wood, trees, stone, ores, flowers, ice, sand, dirt, water, lava) or specific IDs (minecraft:oak_log) or tags (#minecraft:logs)' },
-        to_block: { type: 'string', description: 'Block to replace with (e.g. minecraft:glass, minecraft:lava, minecraft:air)' },
-        dimension: { type: 'string', description: 'Dimension. Omit for overworld.' },
-        min_y: { type: 'integer', description: 'Minimum Y (default 50)' },
-        max_y: { type: 'integer', description: 'Maximum Y (default 120)' },
-      },
-      required: ['center_x', 'center_z', 'from_block', 'to_block'],
-    },
-  },
-  {
-    name: 'locate_and_teleport',
-    description: 'Find a structure or biome and teleport players there. Handles /locate, coordinate parsing, dimension detection, and /tp automatically. Works for: village, ocean monument, guardian temple, fortress, bastion, end city, mineshaft, stronghold, trial chambers, mansion, witch hut, pyramid, jungle temple, igloo, shipwreck, ancient city, pillager outpost, deep dark, skulk, lush cave, mushroom, cherry grove, desert, jungle, forest, plains, snowy plains, polar bear, ice spikes, ocean, badlands, meadow, flower forest, taiga, savanna, soul sand valley, crimson forest, warped forest, basalt deltas, and more.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        target: { type: 'string', description: 'What to find (natural language, e.g. "village", "ocean monument", "deep dark", "cherry grove", "nether fortress")' },
-        players: { type: 'string', description: 'Who to teleport. Use "@a" for everyone, or one or more player names separated by commas (e.g. "_FlameFrags__,ThePro261"). All players land at the SAME spot. Default "@a".' },
-      },
-      required: ['target'],
-    },
-  },
-  {
-    name: 'plant_trees',
-    description: 'Plant natural-looking trees at a location. Handles ground prep and /place feature automatically. Some trees may fail on unsuitable terrain — the tool compensates by attempting 2x the requested count.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        tree_type: { type: 'string', enum: ['cherry', 'oak', 'birch', 'spruce', 'jungle', 'dark oak', 'acacia'], description: 'Type of tree' },
-        count: { type: 'integer', description: 'How many trees (max 200). ~50% will succeed on natural terrain.' },
-        center_x: { type: 'number' },
-        center_z: { type: 'number' },
-        radius: { type: 'integer', description: 'Radius to scatter trees in (max 100, default 50)' },
-        dimension: { type: 'string', description: 'Dimension. Omit for overworld.' },
-      },
-      required: ['tree_type', 'count', 'center_x', 'center_z'],
-    },
-  },
-  {
-    name: 'scan_area',
-    description: 'Scan an area to discover what block types are present. ONLY use this for CONVERSION/REPLACEMENT tasks ("convert village to desert", "replace all wood with glass"). Do NOT use for BUILDING tasks ("build a bridge", "build a house") — those just need coordinates, not a scan. Takes 30-60 seconds. Handles chunk loading automatically.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        center_x: { type: 'number' },
-        center_z: { type: 'number' },
-        radius: { type: 'integer', description: 'Scan radius (max 50, default 30)' },
-        dimension: { type: 'string', description: 'Dimension. Omit for overworld.' },
-      },
-      required: ['center_x', 'center_z'],
-    },
-  },
-  {
-    name: 'place_structure',
-    description: 'Generate an entire Minecraft structure at a location. Places REAL procedurally-generated structures — trial chambers, villages, ocean monuments, fortresses, mansions, etc. Handles chunk loading automatically. Use when the operator says "place", "build", "create", or "generate" a known Minecraft structure. Available structures: trial_chambers, village_plains, village_desert, village_savanna, village_snowy, village_taiga, ocean_monument, fortress, bastion_remnant, end_city, woodland_mansion, ancient_city, pillager_outpost, desert_pyramid, jungle_pyramid, swamp_hut, igloo, shipwreck, mineshaft, stronghold, ruined_portal.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        structure: { type: 'string', description: 'Structure type (e.g. "trial_chambers", "village_plains", "ocean_monument")' },
-        x: { type: 'integer' }, y: { type: 'integer' }, z: { type: 'integer' },
-        dimension: { type: 'string', description: 'Dimension. Omit for overworld.' },
-      },
-      required: ['structure', 'x', 'y', 'z'],
-    },
-  },
-  {
-    name: 'get_death_location',
-    description: 'Get where a player last died. Returns coordinates and dimension. Use when someone says "where did I die", "take me to my death", "go back to where I died", etc. Can also teleport them there.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        player: { type: 'string', description: 'Player name' },
-      },
-      required: ['player'],
-    },
-  },
+  // === HIGH-LEVEL TOOLS (auto-discovered from tools/*.js) ===
+  ...toolsIndex.schemas,
   // === LOW-LEVEL TOOLS (use when high-level tools don't cover the need) ===
   {
     name: 'setblock',
@@ -333,21 +237,12 @@ const TOOLS = [
 
 async function executeTool(name, input) {
   try {
+    // Try auto-discovered tools first (kit, buff_debuff, start_session, equip_player, etc.)
+    const autoTool = toolsIndex.tools[name];
+    if (autoTool) return await autoTool.execute(input);
+
+    // Low-level tools that aren't in tools/ directory
     switch (name) {
-      case 'equip_player':
-        return await tools.equipPlayer(input.player, input.tier || 'netherite', input.items);
-      case 'scan_area':
-        return await tools.scanArea(input.center_x, input.center_z, input.radius, input.dimension);
-      case 'get_death_location':
-        return await tools.getDeathLocation(input.player);
-      case 'place_structure':
-        return await tools.placeStructure(input.structure, input.x, input.y, input.z, input.dimension);
-      case 'replace_blocks_in_area':
-        return await tools.replaceBlocksInArea(input.center_x, input.center_z, input.radius, input.from_block, input.to_block, input.dimension, input.min_y, input.max_y);
-      case 'locate_and_teleport':
-        return await tools.locateAndTeleport(input.target, input.players || '@a');
-      case 'plant_trees':
-        return await tools.plantTrees(input.tree_type, input.count, input.center_x, input.center_z, input.radius, input.dimension);
       case 'setblock':
         return await bisect.setBlock(input.x, input.y, input.z, input.block, input.dimension);
       case 'fill':
