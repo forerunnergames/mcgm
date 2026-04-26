@@ -1,87 +1,209 @@
 // Gamemaster platform and spawn management.
-// Builds a glass platform at height limit for the gamemaster on server start.
-// Auto-teleports the GM there on join. Used as the Switch-safe position
-// during large block operations.
+// Builds a glass platform at height limit for the gamemaster.
+// Supports relocating the entire game session to a new location.
 
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const api = require('./api');
 
 const GM_PLAYER = process.env.AUTHORIZED_OP || '.knightofiam85';
+const STATE_FILE = path.join(__dirname, '..', 'memory', 'gm-state.json');
 
-// Platform config — centered at spawn, at build height limit
-const PLATFORM = {
-  cx: 0,
-  cz: 0,
-  y: 310,         // just below 319 height limit, leaves room above
-  radius: 15,     // 31x31 glass platform
-  block: 'minecraft:glass',
+// ============================================================================
+// State — persisted to disk so it survives bot restarts
+// ============================================================================
+
+let state = {
+  platform: { cx: 0, cz: 0, y: 310, radius: 15 },
+  dimension: 'minecraft:overworld',
+  playerSpawn: { x: 0, y: 64, z: 0 },
 };
 
-// The exact tp destination (center of platform, 1 block above surface)
-const GM_SPAWN = {
-  x: PLATFORM.cx,
-  y: PLATFORM.y + 1,
-  z: PLATFORM.cz,
-};
+function loadState() {
+  try {
+    state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+  } catch {}
+}
 
-let platformBuilt = false;
+function saveState() {
+  fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
+  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+}
 
-/**
- * Build the gamemaster's glass platform. Idempotent — safe to call multiple times.
- */
-async function buildPlatform() {
-  const { cx, cz, y, radius, block } = PLATFORM;
+loadState();
 
-  // Tp bot to platform area first for chunk loading
-  await api.sendCommand(`tp .knightofiam1294 ${cx} ${y} ${cz}`);
-  await api.sendCommand(`forceload add ${cx - radius} ${cz - radius} ${cx + radius} ${cz + radius}`);
+// ============================================================================
+// Platform building
+// ============================================================================
+
+const PLATFORM_BLOCK = 'minecraft:glass';
+
+function getGMSpawn() {
+  return { x: state.platform.cx, y: state.platform.y + 1, z: state.platform.cz };
+}
+
+async function buildPlatformAt(cx, cz, y, dimension) {
+  const radius = state.platform.radius;
+  const dp = dimension && dimension !== 'minecraft:overworld'
+    ? `execute in ${dimension} run ` : '';
+
+  // Chunk loading
+  await api.sendCommand(`${dp}tp .knightofiam1294 ${cx} ${y} ${cz}`);
+  await api.sendCommand(`${dp}forceload add ${cx - radius} ${cz - radius} ${cx + radius} ${cz + radius}`);
   await new Promise(r => setTimeout(r, 2000));
 
-  // Build the platform (single layer of glass)
-  await api.sendCommand(`fill ${cx - radius} ${y} ${cz - radius} ${cx + radius} ${y} ${cz + radius} ${block}`);
+  // Platform floor
+  await api.sendCommand(`${dp}fill ${cx - radius} ${y} ${cz - radius} ${cx + radius} ${y} ${cz + radius} ${PLATFORM_BLOCK}`);
 
-  // Add glass walls (2 blocks high) around the edge so GM doesn't walk off
-  await api.sendCommand(`fill ${cx - radius} ${y + 1} ${cz - radius} ${cx + radius} ${y + 2} ${cz - radius} ${block}`); // north wall
-  await api.sendCommand(`fill ${cx - radius} ${y + 1} ${cz + radius} ${cx + radius} ${y + 2} ${cz + radius} ${block}`); // south wall
-  await api.sendCommand(`fill ${cx - radius} ${y + 1} ${cz - radius} ${cx - radius} ${y + 2} ${cz + radius} ${block}`); // west wall
-  await api.sendCommand(`fill ${cx + radius} ${y + 1} ${cz - radius} ${cx + radius} ${y + 2} ${cz + radius} ${block}`); // east wall
+  // Glass walls (2 high)
+  await api.sendCommand(`${dp}fill ${cx - radius} ${y + 1} ${cz - radius} ${cx + radius} ${y + 2} ${cz - radius} ${PLATFORM_BLOCK}`);
+  await api.sendCommand(`${dp}fill ${cx - radius} ${y + 1} ${cz + radius} ${cx + radius} ${y + 2} ${cz + radius} ${PLATFORM_BLOCK}`);
+  await api.sendCommand(`${dp}fill ${cx - radius} ${y + 1} ${cz - radius} ${cx - radius} ${y + 2} ${cz + radius} ${PLATFORM_BLOCK}`);
+  await api.sendCommand(`${dp}fill ${cx + radius} ${y + 1} ${cz - radius} ${cx + radius} ${y + 2} ${cz + radius} ${PLATFORM_BLOCK}`);
 
-  await api.sendCommand('forceload remove all');
-  platformBuilt = true;
-  console.log(`[gamemaster] platform built at (${cx}, ${y}, ${cz}) radius ${radius}`);
+  await api.sendCommand(`${dp}forceload remove all`);
+
+  // Update state
+  state.platform = { cx, cz, y, radius };
+  state.dimension = dimension || 'minecraft:overworld';
+  saveState();
+
+  console.log(`[gamemaster] platform built at (${cx}, ${y}, ${cz})`);
 }
 
+async function buildPlatform() {
+  const { cx, cz, y } = state.platform;
+  await buildPlatformAt(cx, cz, y, state.dimension);
+}
+
+// ============================================================================
+// Session relocation — "start new game at <location>"
+// ============================================================================
+
 /**
- * Teleport the gamemaster to the platform.
+ * Relocate the entire game session to a new location.
+ * - Builds GM platform at height limit above the location
+ * - Sets player spawn at ground level
+ * - Sets GM spawn on the platform
+ * - Teleports everyone
+ *
+ * @param {number} x - Center X
+ * @param {number} z - Center Z
+ * @param {string} dimension - e.g. 'minecraft:overworld'
+ * @param {string[]} players - All player names to teleport
+ * @param {object} opts - { groundY: number }
  */
+async function relocateSession(x, z, dimension, players, opts = {}) {
+  const dp = dimension && dimension !== 'minecraft:overworld'
+    ? `execute in ${dimension} run ` : '';
+  const groundY = opts.groundY || 64;
+  const platformY = 310;
+
+  // 1. Build GM platform at new location
+  await buildPlatformAt(x, z, platformY, dimension);
+
+  // 2. Find safe ground Y using spreadplayers on the bot
+  await api.sendCommand(`${dp}spreadplayers ${x} ${z} 0 1 false .knightofiam1294`);
+  await new Promise(r => setTimeout(r, 1000));
+  const { getPlayerPositionAndDimension } = require('./log-reader');
+  const botPos = await getPlayerPositionAndDimension('.knightofiam1294');
+  let safeGroundY = groundY;
+  if (botPos.ok && botPos.position) {
+    const coords = botPos.position.match(/-?\d+\.\d+/g);
+    if (coords && coords.length >= 2) safeGroundY = Math.floor(parseFloat(coords[1]));
+  }
+
+  // 3. Set spawn point for all non-GM players at ground level
+  state.playerSpawn = { x, y: safeGroundY, z };
+  state.dimension = dimension || 'minecraft:overworld';
+  saveState();
+
+  for (const player of players) {
+    if (player === GM_PLAYER) continue;
+    await api.sendCommand(`${dp}spawnpoint ${player} ${x} ${safeGroundY} ${z}`);
+  }
+
+  // 4. Set GM spawn on platform
+  await api.sendCommand(`${dp}spawnpoint ${GM_PLAYER} ${x} ${platformY + 1} ${z}`);
+
+  // 5. Teleport GM to platform
+  await api.sendCommand(`${dp}tp ${GM_PLAYER} ${x} ${platformY + 1} ${z}`);
+
+  // 6. Teleport all other players to ground level
+  for (const player of players) {
+    if (player === GM_PLAYER) continue;
+    await api.sendCommand(`${dp}tp ${player} ${x} ${safeGroundY} ${z}`);
+  }
+
+  console.log(`[gamemaster] session relocated to (${x}, ${z}) dim=${dimension}`);
+
+  return {
+    ok: true,
+    location: { x, z },
+    dimension: dimension || 'minecraft:overworld',
+    gm_platform: { x, y: platformY, z },
+    player_spawn: { x, y: safeGroundY, z },
+    players_teleported: players.length,
+  };
+}
+
+// ============================================================================
+// Predefined session locations
+// ============================================================================
+
+const SESSION_PRESETS = {
+  // World boundary — random direction, 25000 blocks out
+  'world boundary': () => {
+    const angle = Math.random() * 2 * Math.PI;
+    const dist = 25000;
+    return { x: Math.floor(Math.cos(angle) * dist), z: Math.floor(Math.sin(angle) * dist), dimension: 'minecraft:overworld' };
+  },
+  'north boundary': () => ({ x: 0, z: -25000, dimension: 'minecraft:overworld' }),
+  'south boundary': () => ({ x: 0, z: 25000, dimension: 'minecraft:overworld' }),
+  'east boundary': () => ({ x: 25000, z: 0, dimension: 'minecraft:overworld' }),
+  'west boundary': () => ({ x: -25000, z: 0, dimension: 'minecraft:overworld' }),
+  // Random far location
+  'random': () => {
+    const x = Math.floor((Math.random() - 0.5) * 40000);
+    const z = Math.floor((Math.random() - 0.5) * 40000);
+    return { x, z, dimension: 'minecraft:overworld' };
+  },
+  // Nether
+  'nether': () => ({ x: 0, z: 0, dimension: 'minecraft:the_nether' }),
+  'nether random': () => {
+    const x = Math.floor((Math.random() - 0.5) * 10000);
+    const z = Math.floor((Math.random() - 0.5) * 10000);
+    return { x, z, dimension: 'minecraft:the_nether' };
+  },
+  // Spawn
+  'spawn': () => ({ x: 0, z: 0, dimension: 'minecraft:overworld' }),
+};
+
+// ============================================================================
+// Auto-tp on join
+// ============================================================================
+
 async function teleportGMToPlatform() {
-  await api.sendCommand(`tp ${GM_PLAYER} ${GM_SPAWN.x} ${GM_SPAWN.y} ${GM_SPAWN.z}`);
-  console.log(`[gamemaster] teleported ${GM_PLAYER} to platform`);
+  const spawn = getGMSpawn();
+  const dp = state.dimension !== 'minecraft:overworld'
+    ? `execute in ${state.dimension} run ` : '';
+  await api.sendCommand(`${dp}tp ${GM_PLAYER} ${spawn.x} ${spawn.y} ${spawn.z}`);
 }
 
-/**
- * Check the server log for the GM joining, and tp them to the platform.
- * Call this periodically or after detecting a join event.
- */
 async function onPlayerJoin(playerName) {
   if (playerName === GM_PLAYER || playerName === GM_PLAYER.replace(/^\./, '')) {
-    if (!platformBuilt) await buildPlatform();
-    // Small delay so the player fully loads in
     await new Promise(r => setTimeout(r, 1500));
     await teleportGMToPlatform();
-    // Also give creative mode + resistance for safety
     await api.sendCommand(`gamemode creative ${GM_PLAYER}`);
     await api.sendCommand(`effect give ${GM_PLAYER} minecraft:resistance infinite 4 true`);
   }
 }
 
-/**
- * Start watching the server log for player join events.
- * Polls every 5 seconds.
- */
 let watchInterval = null;
 let lastLogCheck = '';
+let lastJoinTime = 0;
 
 function startWatching() {
   if (watchInterval) return;
@@ -91,33 +213,38 @@ function startWatching() {
       if (tail === lastLogCheck) return;
       lastLogCheck = tail;
 
-      // Look for join messages: ".knightofiam85 joined the game"
       const joinRe = /(\S+) joined the game/g;
       let m;
       while ((m = joinRe.exec(tail)) !== null) {
         const player = m[1];
-        // Only trigger once per join (check if this is a new line)
         if (player === GM_PLAYER || player === GM_PLAYER.replace(/^\./, '')) {
-          await onPlayerJoin(player);
+          // Debounce — don't re-trigger within 30 seconds
+          const now = Date.now();
+          if (now - lastJoinTime > 30000) {
+            lastJoinTime = now;
+            await onPlayerJoin(player);
+          }
         }
       }
-    } catch (e) {
-      // Silently ignore polling errors
-    }
+    } catch (e) { /* ignore polling errors */ }
   }, 5000);
   console.log(`[gamemaster] watching for ${GM_PLAYER} joins`);
 }
 
 function stopWatching() {
-  if (watchInterval) {
-    clearInterval(watchInterval);
-    watchInterval = null;
-  }
+  if (watchInterval) { clearInterval(watchInterval); watchInterval = null; }
 }
 
+// ============================================================================
+// Exports
+// ============================================================================
+
 module.exports = {
-  buildPlatform, teleportGMToPlatform, onPlayerJoin,
+  buildPlatform, buildPlatformAt, relocateSession,
+  teleportGMToPlatform, onPlayerJoin,
   startWatching, stopWatching,
-  GM_PLAYER, GM_SPAWN, PLATFORM,
-  isPlatformBuilt: () => platformBuilt,
+  getGMSpawn, getState: () => state,
+  GM_PLAYER, PLATFORM: state.platform, GM_SPAWN: getGMSpawn(),
+  SESSION_PRESETS,
+  isPlatformBuilt: () => true,
 };

@@ -133,7 +133,7 @@ async function executeBatch(commands) {
         if (pos.ok) {
           switchPlayerSaved = pos;
           const gm = require('./gamemaster');
-          const safePos = gm.GM_SPAWN;
+          const safePos = gm.getGMSpawn();
           console.log(`[executor] switch protection: moving ${SWITCH_PLAYER} to GM platform (${blockCmdCount} block cmds)`);
           await api.sendCommand(`tp ${SWITCH_PLAYER} ${safePos.x} ${safePos.y} ${safePos.z}`);
           await new Promise(r => setTimeout(r, 500));
