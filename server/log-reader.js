@@ -83,9 +83,14 @@ async function listPlayers() {
   await api.sendCommand('list');
   await new Promise(r => setTimeout(r, 600));
   const tail = await api.readLogTail(20);
-  const m = tail.match(/There are \d+ of a max of \d+ players online:\s*(.*)$/m);
+  const m = tail.match(/There are (\d+) of a max of \d+ players online:\s*(.*)$/m);
   if (!m) return { ok: false, error: 'list output not found' };
-  const names = m[1].split(',').map(s => s.trim()).filter(Boolean);
+  const count = parseInt(m[1]);
+  if (count === 0) return { ok: true, players: [] };
+  // Filter out anything that looks like a log line, not a player name
+  const names = m[2].split(',')
+    .map(s => s.trim())
+    .filter(s => s && !s.includes('[') && !s.includes('/') && s.length < 30);
   return { ok: true, players: names };
 }
 
