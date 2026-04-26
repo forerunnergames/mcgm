@@ -4,7 +4,8 @@
   "type": "commonjs",
   "main": "bot.js",
   "scripts": {
-    "start": "node --disable-warning=DEP0040 bot.js"
+    "start": "node --disable-warning=DEP0040 bot.js",
+    "test": "node --test 'test/*.test.js'"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.40.0",
