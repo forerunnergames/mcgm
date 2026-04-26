@@ -41,8 +41,13 @@ async function verifyLog(pattern, desc, waitMs = 1500) {
 }
 
 async function getOnlinePlayers() {
-  const r = await server.listPlayers();
-  return r.ok ? r.players : [];
+  // Retry twice with delay — listPlayers can miss on first try due to log timing
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const r = await server.listPlayers();
+    if (r.ok && r.players.length > 0) return r.players;
+    await sleep(1000);
+  }
+  return [];
 }
 
 // ============================================================================
