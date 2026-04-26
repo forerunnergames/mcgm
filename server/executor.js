@@ -14,6 +14,14 @@ const { isValidEntity } = require('../minecraft/registry');
 let batchCounter = 0;
 let currentBatchAborted = false;
 
+// Switch player protection: the Nintendo Switch freezes when receiving thousands
+// of block-change packets in one tick. We tp the Switch player far away before
+// large operations so the changes happen outside their render distance, then
+// bring them back after.
+const SWITCH_PLAYER = process.env.SWITCH_PLAYER || '.knightofiam85';
+const SWITCH_PROTECTION_THRESHOLD = 50; // block commands that trigger protection
+const SWITCH_SAFE_POS = { x: 29999, y: 200, z: 29999 }; // far corner, high up
+
 /**
  * Execute a single command with optional output capture.
  */
@@ -114,6 +122,25 @@ async function executeBatch(commands) {
       }
     }
 
+    // Switch protection: tp the Switch player away before large block operations
+    // so they don't receive thousands of block-change packets that freeze the client.
+    const blockCmdCount = batchCmds.filter(c => c.category === 'block').length;
+    let switchPlayerSaved = null;
+    if (SWITCH_PLAYER && blockCmdCount >= SWITCH_PROTECTION_THRESHOLD) {
+      try {
+        const { getPlayerPositionAndDimension } = require('./log-reader');
+        const pos = await getPlayerPositionAndDimension(SWITCH_PLAYER);
+        if (pos.ok) {
+          switchPlayerSaved = pos;
+          console.log(`[executor] switch protection: moving ${SWITCH_PLAYER} away (${blockCmdCount} block cmds)`);
+          await api.sendCommand(`tp ${SWITCH_PLAYER} ${SWITCH_SAFE_POS.x} ${SWITCH_SAFE_POS.y} ${SWITCH_SAFE_POS.z}`);
+          await new Promise(r => setTimeout(r, 500));
+        }
+      } catch (e) {
+        // Player may be offline (on phone) — that's fine, no protection needed
+      }
+    }
+
     batchCounter++;
     currentBatchAborted = false;
     const funcName = `batch_${batchCounter}`;
@@ -151,6 +178,23 @@ async function executeBatch(commands) {
       await api.deleteFiles('/world/datapacks/claude-bot/data/claude/function', [`${funcName}.mcfunction`]);
     } catch (e) {
       console.warn(`[executor] cleanup failed for ${funcName}:`, e.message);
+    }
+
+    // Switch protection: tp the Switch player back to their original position
+    if (switchPlayerSaved) {
+      try {
+        // Wait a beat for the server to finish processing block changes
+        await new Promise(r => setTimeout(r, 1500));
+        const coords = switchPlayerSaved.position.match(/-?\d+\.\d+/g);
+        if (coords && coords.length >= 3) {
+          const [px, py, pz] = coords.map(c => Math.floor(parseFloat(c)));
+          const dp = chunkLoader.dimPrefix(switchPlayerSaved.dimension);
+          await api.sendCommand(`${dp}tp ${SWITCH_PLAYER} ${px} ${py} ${pz}`);
+          console.log(`[executor] switch protection: returned ${SWITCH_PLAYER} to ${px} ${py} ${pz}`);
+        }
+      } catch (e) {
+        console.warn(`[executor] switch protection: failed to return player:`, e.message);
+      }
     }
   }
 
