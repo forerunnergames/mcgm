@@ -52,17 +52,27 @@ async function readInventory(player) {
   if (!result.ok) return { ok: false, error: result.error };
 
   const output = result.output || '';
-  // Parse SNBT inventory data: [{Slot: 0b, count: 1, id: "minecraft:diamond_sword"}, ...]
+  // Parse SNBT inventory data. Paper 26.1.1 formats vary:
+  //   {Slot: 0b, count: 1, id: "minecraft:diamond_sword", ...}
+  //   {count: 1, id: "minecraft:iron_helmet", Slot: 103b}
+  // The Slot and id can appear in any order within each item entry.
   const occupied = {};
-  // Match each item entry — handles various SNBT formats
-  const itemRe = /Slot:\s*(-?\d+)b[^}]*?id:\s*"([^"]+)"/g;
-  let m;
-  while ((m = itemRe.exec(output)) !== null) {
-    const slotNum = parseInt(m[1]);
-    const itemId = m[2];
-    const namedSlot = SNBT_TO_NAMED[slotNum];
-    if (namedSlot) {
-      occupied[namedSlot] = itemId;
+  // Split into individual item entries by matching balanced braces
+  const entries = [];
+  let depth = 0, start = -1;
+  for (let i = 0; i < output.length; i++) {
+    if (output[i] === '{') { if (depth === 0) start = i; depth++; }
+    else if (output[i] === '}') { depth--; if (depth === 0 && start >= 0) entries.push(output.slice(start, i + 1)); }
+  }
+  for (const entry of entries) {
+    const slotMatch = entry.match(/Slot:\s*(-?\d+)b/);
+    const idMatch = entry.match(/id:\s*"([^"]+)"/);
+    if (slotMatch && idMatch) {
+      const slotNum = parseInt(slotMatch[1]);
+      const namedSlot = SNBT_TO_NAMED[slotNum];
+      if (namedSlot) {
+        occupied[namedSlot] = idMatch[1];
+      }
     }
   }
 

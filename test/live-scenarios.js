@@ -338,6 +338,291 @@ const scenarios = {
     // Cleanup
     await server.runCommand(`effect clear ${player}`);
   },
+
+  // ========================================================================
+  // EXTREME SCENARIOS
+  // ========================================================================
+
+  async scenario_prison() {
+    console.log('\n🔒 EXTREME: Obsidian prison with mobs');
+    const players = await getOnlinePlayers();
+    if (players.length === 0) { log(WARN, 'No players online — skipping'); return; }
+    const player = players[0];
+
+    // Get player position
+    const pos = await server.getPlayerPositionAndDimension(player);
+    if (!pos.ok) { log(FAIL, `Can't find ${player}`); return; }
+    const coords = pos.position.match(/-?\d+\.\d+/g).map(c => Math.floor(parseFloat(c)));
+    const [px, py, pz] = coords;
+    log(PASS, `Found ${player} at (${px}, ${py}, ${pz})`);
+
+    // Build obsidian box around them
+    const r = 4;
+    const cmds = [
+      `fill ${px-r} ${py-1} ${pz-r} ${px+r} ${py+6} ${pz+r} minecraft:obsidian hollow`,
+      // Spawn hostile mobs inside
+      `summon minecraft:zombie ${px+1} ${py} ${pz+1}`,
+      `summon minecraft:skeleton ${px-1} ${py} ${pz-1}`,
+      `summon minecraft:spider ${px} ${py} ${pz+2}`,
+    ];
+    const result = await server.executeBatch(cmds);
+    if (result.ok) log(PASS, `Prison built at (${px}, ${py}, ${pz}) with 3 mobs`);
+    else log(FAIL, `Prison failed: ${result.error}`);
+
+    await sleep(3000);
+
+    // Cleanup — remove prison and mobs
+    await server.executeBatch([
+      `fill ${px-r} ${py-1} ${pz-r} ${px+r} ${py+6} ${pz+r} minecraft:air`,
+      `kill @e[type=minecraft:zombie,distance=..20]`,
+      `kill @e[type=minecraft:skeleton,distance=..20]`,
+      `kill @e[type=minecraft:spider,distance=..20]`,
+    ]);
+    log(PASS, 'Prison cleaned up');
+  },
+
+  async scenario_lava_floor() {
+    console.log('\n🌋 EXTREME: Lava floor under player');
+    const players = await getOnlinePlayers();
+    if (players.length === 0) { log(WARN, 'No players online — skipping'); return; }
+    const player = players[0];
+
+    // Give them fire resistance first so they don't die
+    await server.executeBatch([
+      `effect give ${player} minecraft:fire_resistance 60 0 true`,
+      `effect give ${player} minecraft:resistance 60 4 true`,
+    ]);
+    log(PASS, 'Applied fire resistance + damage resistance');
+
+    // Get position
+    const pos = await server.getPlayerPositionAndDimension(player);
+    if (!pos.ok) { log(FAIL, 'Can\'t find player'); return; }
+    const coords = pos.position.match(/-?\d+\.\d+/g).map(c => Math.floor(parseFloat(c)));
+    const [px, py, pz] = coords;
+
+    // Replace ground under them with lava (20 block radius)
+    const result = await server.executeBatch([
+      `fill ${px-20} ${py-1} ${pz-20} ${px+20} ${py-1} ${pz+20} minecraft:lava replace minecraft:grass_block`,
+      `fill ${px-20} ${py-1} ${pz-20} ${px+20} ${py-1} ${pz+20} minecraft:lava replace minecraft:dirt`,
+      `fill ${px-20} ${py-1} ${pz-20} ${px+20} ${py-1} ${pz+20} minecraft:lava replace minecraft:stone`,
+    ]);
+    if (result.ok) log(PASS, `Lava floor placed under ${player}`);
+    else log(FAIL, `Lava floor failed: ${result.error}`);
+
+    await sleep(4000);
+
+    // Cleanup — restore ground and clear effects
+    await server.executeBatch([
+      `fill ${px-20} ${py-1} ${pz-20} ${px+20} ${py-1} ${pz+20} minecraft:grass_block replace minecraft:lava`,
+    ]);
+    await server.executeBatch([
+      `effect clear ${player}`,
+    ]);
+    log(PASS, 'Lava cleaned up, effects cleared');
+  },
+
+  async scenario_kit_swap() {
+    console.log('\n🔄 EXTREME: Rapid kit cycling (min → max → underwater → strip)');
+    const players = await getOnlinePlayers();
+    if (players.length === 0) { log(WARN, 'No players online — skipping'); return; }
+    const player = players[0];
+    const toolsIdx = require('../tools/index');
+
+    // Apply min kit
+    let result = await toolsIdx.executeTool('kit', { player, kit: 'min', action: 'apply' });
+    if (result.ok) log(PASS, `Min kit applied (${result.slots_equipped} slots)`);
+    else log(FAIL, `Min kit failed: ${result.error}`);
+
+    await sleep(500);
+
+    // Replace with max kit (should strip min first)
+    result = await toolsIdx.executeTool('kit', { player, kit: 'max', action: 'replace', old_kit: 'min' });
+    if (result.ok) log(PASS, `Max kit replaced min (${result.slots_equipped} slots)`);
+    else log(FAIL, `Max kit replace failed: ${result.error}`);
+
+    await sleep(500);
+
+    // Replace with underwater kit
+    result = await toolsIdx.executeTool('kit', { player, kit: 'underwater', action: 'replace', old_kit: 'max' });
+    if (result.ok) log(PASS, `Underwater kit replaced max (${result.slots_equipped} slots)`);
+    else log(FAIL, `Underwater kit failed: ${result.error}`);
+
+    await sleep(500);
+
+    // Strip all
+    result = await toolsIdx.executeTool('kit', { player, action: 'strip_all' });
+    if (result.ok) log(PASS, 'All gear stripped');
+    else log(FAIL, `Strip failed: ${result.error}`);
+  },
+
+  async scenario_fill_junk_inventory() {
+    console.log('\n🗑️ EXTREME: Fill inventory with junk, then give kit on top');
+    const players = await getOnlinePlayers();
+    if (players.length === 0) { log(WARN, 'No players online — skipping'); return; }
+    const player = players[0];
+    const toolsIdx = require('../tools/index');
+
+    // First give them a level 3 kit
+    await toolsIdx.executeTool('kit', { player, kit: '3', action: 'apply' });
+    log(PASS, 'Level 3 kit applied');
+
+    // Fill empty slots with junk
+    const junkResult = await toolsIdx.executeTool('inventory', { player, action: 'fill_junk' });
+    if (junkResult.ok) log(PASS, `Filled ${junkResult.filled} empty slots with junk`);
+    else log(FAIL, `Fill junk failed: ${junkResult.error}`);
+
+    // Read inventory to verify gear wasn't overwritten
+    const inv = await toolsIdx.executeTool('inventory', { player, action: 'read' });
+    if (inv.ok) {
+      const hasHelmet = inv.slots['armor.head']?.includes('iron_helmet');
+      const hasSword = inv.slots['weapon.mainhand']?.includes('iron_sword');
+      const emptyCount = inv.empty.length;
+      if (hasHelmet && hasSword) log(PASS, `Gear preserved (helmet+sword intact, ${emptyCount} empty slots remain)`);
+      else log(FAIL, `Gear overwritten! helmet=${inv.slots['armor.head']}, sword=${inv.slots['weapon.mainhand']}`);
+    } else {
+      log(WARN, 'Could not read inventory to verify');
+    }
+
+    // Cleanup
+    await toolsIdx.executeTool('kit', { player, action: 'strip_all' });
+    log(PASS, 'Cleaned up');
+  },
+
+  async scenario_mountain_teleport() {
+    console.log('\n⛰️ EXTREME: Teleport to mountain top (surface Y test)');
+    const players = await getOnlinePlayers();
+    if (players.length === 0) { log(WARN, 'No players online — skipping'); return; }
+    const player = players[0];
+    const toolsIdx = require('../tools/index');
+
+    const result = await toolsIdx.executeTool('locate_and_teleport', { target: 'mountain top', players: player });
+    if (!result.ok) { log(FAIL, `Mountain locate failed: ${result.error}`); return; }
+    log(PASS, `Mountain found at (${result.coordinates.x}, ${result.coordinates.y}, ${result.coordinates.z})`);
+
+    // Verify player Y is reasonable for a mountain (should be > 100)
+    await sleep(1500);
+    const pos = await server.getPlayerPositionAndDimension(player);
+    if (pos.ok) {
+      const coords = pos.position.match(/-?\d+\.\d+/g).map(c => parseFloat(c));
+      const playerY = coords[1];
+      if (playerY > 90) log(PASS, `Player at Y=${Math.round(playerY)} — on a mountain`);
+      else if (playerY > 60) log(WARN, `Player at Y=${Math.round(playerY)} — maybe a low mountain`);
+      else log(FAIL, `Player at Y=${Math.round(playerY)} — not on a mountain (too low)`);
+    }
+
+    // Return to spawn
+    await server.runCommand(`tp ${player} 0 64 0`);
+    log(PASS, 'Returned to spawn');
+  },
+
+  async scenario_trial_chambers() {
+    console.log('\n🏛️ EXTREME: Teleport to trial chambers (underground Y test)');
+    const players = await getOnlinePlayers();
+    if (players.length === 0) { log(WARN, 'No players online — skipping'); return; }
+    const player = players[0];
+    const toolsIdx = require('../tools/index');
+
+    // Give resistance so they don't die if something goes wrong
+    await server.executeBatch([`effect give ${player} minecraft:resistance 60 4 true`]);
+
+    const result = await toolsIdx.executeTool('locate_and_teleport', { target: 'trial chambers', players: player });
+    if (!result.ok) { log(FAIL, `Trial chambers locate failed: ${result.error}`); return; }
+    log(PASS, `Trial chambers at (${result.coordinates.x}, ${result.coordinates.y}, ${result.coordinates.z})`);
+
+    // Verify player is underground (Y should be negative or very low)
+    await sleep(2000);
+    const pos = await server.getPlayerPositionAndDimension(player);
+    if (pos.ok) {
+      const coords = pos.position.match(/-?\d+\.\d+/g).map(c => parseFloat(c));
+      const playerY = coords[1];
+      if (playerY < 0) log(PASS, `Player at Y=${Math.round(playerY)} — underground`);
+      else if (playerY < 40) log(PASS, `Player at Y=${Math.round(playerY)} — below surface`);
+      else log(FAIL, `Player at Y=${Math.round(playerY)} — not underground (too high)`);
+    }
+
+    // Return to spawn and clear effects
+    await server.runCommand(`tp ${player} 0 64 0`);
+    await server.executeBatch([`effect clear ${player}`]);
+    log(PASS, 'Returned to spawn');
+  },
+
+  async scenario_mixed_batch() {
+    console.log('\n🧬 EXTREME: Mixed batch — blocks + effects + items + tp in one call');
+    const players = await getOnlinePlayers();
+    if (players.length === 0) { log(WARN, 'No players online — skipping'); return; }
+    const player = players[0];
+
+    // One executeBatch with every command type
+    const cmds = [
+      'fill 200 64 200 210 68 210 minecraft:obsidian hollow',           // block → batch
+      `effect give ${player} minecraft:glowing 30 0 true`,              // effect → individual
+      `item replace entity ${player} hotbar.8 with minecraft:compass`,  // item → individual
+      'summon minecraft:chicken 205 65 205',                             // entity → batch
+      `tp ${player} 205 65 205`,                                         // tp → individual
+      'setblock 205 69 205 minecraft:glowstone',                         // block → batch
+      `give ${player} minecraft:arrow 32`,                               // give → individual
+    ];
+    const result = await server.executeBatch(cmds);
+    if (result.ok) {
+      log(PASS, `Mixed batch: ${result.commands_executed} cmds, ${result.succeeded} succeeded`);
+      if (result.errors?.length > 0) log(WARN, `${result.errors.length} errors: ${JSON.stringify(result.errors)}`);
+    } else {
+      log(FAIL, `Mixed batch failed: ${result.error}`);
+    }
+
+    // Verify player was teleported
+    await sleep(1500);
+    const pos = await server.getPlayerPositionAndDimension(player);
+    if (pos.ok) {
+      const coords = pos.position.match(/-?\d+\.\d+/g).map(c => Math.floor(parseFloat(c)));
+      const dist = Math.sqrt((coords[0] - 205) ** 2 + (coords[2] - 205) ** 2);
+      if (dist < 10) log(PASS, `Player teleported to build site (${dist} blocks away)`);
+      else log(FAIL, `Player NOT at build site (${dist} blocks away)`);
+    }
+
+    // Verify the obsidian structure exists
+    await verifyLog(/Successfully filled|Running function/, 'Build commands executed');
+
+    // Cleanup
+    await server.executeBatch([
+      'fill 200 64 200 210 69 210 minecraft:air',
+      `effect clear ${player}`,
+      `kill @e[type=minecraft:chicken,distance=..30]`,
+    ]);
+    await server.runCommand(`tp ${player} 0 64 0`);
+    log(PASS, 'Cleaned up');
+  },
+
+  async scenario_rapid_buff_cycle() {
+    console.log('\n⚡ EXTREME: Rapid buff/debuff cycling');
+    const players = await getOnlinePlayers();
+    if (players.length === 0) { log(WARN, 'No players online — skipping'); return; }
+    const player = players[0];
+    const toolsIdx = require('../tools/index');
+
+    // Cycle through all 5 buff levels
+    for (let level = 1; level <= 5; level++) {
+      const result = await toolsIdx.executeTool('buff_debuff', { player, type: 'buff', level });
+      if (result.ok) log(PASS, `Buff L${level}: ${result.effects_applied} effects, ${result.max_health} HP`);
+      else log(FAIL, `Buff L${level} failed`);
+    }
+
+    // Clear
+    await toolsIdx.executeTool('buff_debuff', { player, type: 'clear' });
+    log(PASS, 'Cleared all buffs');
+
+    // Cycle through all 5 debuff levels
+    for (let level = 1; level <= 5; level++) {
+      const result = await toolsIdx.executeTool('buff_debuff', { player, type: 'debuff', level });
+      if (result.ok) log(PASS, `Debuff L${level}: ${result.effects_applied} effects, ${result.max_health} HP`);
+      else log(FAIL, `Debuff L${level} failed`);
+    }
+
+    // Clear and restore
+    await toolsIdx.executeTool('buff_debuff', { player, type: 'clear' });
+    log(PASS, 'Cleared all debuffs, restored to normal');
+  },
+
 };
 
 // ============================================================================
