@@ -189,24 +189,7 @@ const TOOLS = [
     description: 'Get high-level server health and resource stats: current state, memory usage, CPU%, disk, uptime, TPS, chunks loaded. Use this FIRST when the operator asks "how\'s the server running?", "is the server healthy?", "is memory ok?", "how much ram is being used?", or similar. This is fast (~100ms) and returns structured data you can reason about and summarize naturally. For a DEEPER look at Java heap specifically, you can also run `spark health` via run_command.',
     input_schema: { type: 'object', properties: {} },
   },
-  {
-    name: 'scatter_blocks',
-    description: 'Scatter random individual blocks in the air at random positions. Coordinates are generated SERVER-SIDE (instant) so this is much faster than generating setblock commands yourself. Use for: random floating blocks, debris fields, chaotic effects, particle-like block clouds. Max 5000 blocks per call.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        block: { type: 'string', description: 'Block ID like minecraft:bedrock, minecraft:obsidian, minecraft:glowstone' },
-        count: { type: 'integer', description: 'How many blocks to scatter (max 5000)' },
-        center_x: { type: 'number', description: 'Center X coordinate' },
-        center_z: { type: 'number', description: 'Center Z coordinate' },
-        radius: { type: 'integer', description: 'Horizontal radius to scatter within (blocks)' },
-        min_y: { type: 'integer', description: 'Minimum Y height' },
-        max_y: { type: 'integer', description: 'Maximum Y height' },
-        dimension: { type: 'string', description: 'Dimension. Omit for overworld.' },
-      },
-      required: ['block', 'count', 'center_x', 'center_z', 'radius', 'min_y', 'max_y'],
-    },
-  },
+  // scatter_blocks is auto-discovered from tools/scatter.js
   {
     name: 'batch_commands',
     description: 'Execute a large batch of commands INSTANTLY in a single server tick via a Minecraft datapack function. Use this instead of individual setblock/fill/summon calls when you need 10+ commands — it writes them all to a .mcfunction file and runs them at once. MASSIVELY faster than sequential API calls. Max 10000 commands per batch. Each command should be a valid Minecraft command WITHOUT the leading slash. For dimension-specific commands, prefix each with "execute in <dimension> run ". For spawning around a point, generate the randomized coordinates yourself in the command list.',
