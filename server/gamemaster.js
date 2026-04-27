@@ -191,8 +191,16 @@ async function onPlayerJoin(playerName) {
   if (playerName === GM_PLAYER || playerName === GM_PLAYER.replace(/^\./, '')) {
     await new Promise(r => setTimeout(r, 1500));
     await teleportGMToPlatform();
-    // No creative mode — GM plays in survival. Just resistance so they don't die from fall damage on tp.
+    // Resistance so they don't die from fall damage on tp
     await api.sendCommand(`effect give ${GM_PLAYER} minecraft:resistance 10 4 true`);
+    // Auto-equip max kit
+    try {
+      const { execute } = require('../tools/kits');
+      await execute({ player: GM_PLAYER, kit: 'max', action: 'apply' });
+      console.log(`[gamemaster] equipped max kit on ${GM_PLAYER}`);
+    } catch (e) {
+      console.warn(`[gamemaster] failed to equip kit:`, e.message);
+    }
   }
 }
 
