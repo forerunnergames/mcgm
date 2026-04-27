@@ -17,6 +17,10 @@
 const http = require('http');
 const { handleChat } = require('./llm');
 const { runCommand } = require('./server');
+const relay = require('./server/relay');
+
+// Relay mode: when true, phone messages go to Claude Code instead of the LLM.
+let relayMode = false;
 
 // Dedupe: tracks messages we just echoed to in-game chat so bot.js can drop
 // them when they come back via the Go transport's chat event stream.
@@ -431,6 +435,25 @@ function startWebUI(opts) {
         return;
       }
 
+      // Relay mode toggle
+      if (req.method === 'POST' && req.url === '/relay/on') {
+        relayMode = true;
+        console.log('[web] RELAY MODE ON — phone messages go to Claude Code');
+        return json(res, 200, { relay: true });
+      }
+      if (req.method === 'POST' && req.url === '/relay/off') {
+        relayMode = false;
+        console.log('[web] RELAY MODE OFF — phone messages go to LLM');
+        return json(res, 200, { relay: false });
+      }
+      // Poll for relay response
+      if (req.method === 'GET' && req.url.startsWith('/relay/response/')) {
+        const id = req.url.split('/').pop();
+        const resp = relay.readResponse(id);
+        if (resp) return json(res, 200, resp);
+        return json(res, 202, { pending: true });
+      }
+
       if (req.method === 'POST' && req.url === '/chat') {
         // Parse body immediately (fast, no queue contention)
         let body;
@@ -444,6 +467,34 @@ function startWebUI(opts) {
           return json(res, 400, { error: 'message required' });
         }
         console.log(`[web] <${operator}> ${message}`);
+
+        // In relay mode, queue the message for Claude Code instead of the LLM
+        if (relayMode) {
+          const id = relay.pushMessage(message);
+          console.log(`[web] RELAY queued: ${id} — "${message}"`);
+          // Poll for response (Claude Code writes it)
+          const maxWait = 120000; // 2 min max
+          const start = Date.now();
+          res.writeHead(200, {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': 'no-cache',
+            'Access-Control-Allow-Origin': '*',
+            'Transfer-Encoding': 'chunked',
+          });
+          const keepAlive = setInterval(() => { try { res.write(' '); } catch {} }, 5000);
+          while (Date.now() - start < maxWait) {
+            const resp = relay.readResponse(id);
+            if (resp) {
+              clearInterval(keepAlive);
+              res.end(JSON.stringify({ reply: resp.reply }));
+              return;
+            }
+            await new Promise(r => setTimeout(r, 1000));
+          }
+          clearInterval(keepAlive);
+          res.end(JSON.stringify({ reply: '(no response from Claude Code — timed out)' }));
+          return;
+        }
 
         // Stream the response with periodic keep-alive whitespace so the
         // phone's fetch() doesn't time out during long tool calls.
