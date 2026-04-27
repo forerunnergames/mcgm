@@ -200,8 +200,28 @@ let watchInterval = null;
 let lastLogCheck = '';
 let lastJoinTime = 0;
 
+async function checkIfGMOnline() {
+  // If the GM is already online when the bot starts, tp them to the platform.
+  try {
+    const { listPlayers } = require('./log-reader');
+    const result = await listPlayers();
+    if (result.ok) {
+      const gmName = GM_PLAYER.replace(/^\./, '');
+      const isOnline = result.players.some(p => p === GM_PLAYER || p === gmName);
+      if (isOnline) {
+        console.log(`[gamemaster] ${GM_PLAYER} already online — teleporting to platform`);
+        await onPlayerJoin(GM_PLAYER);
+      }
+    }
+  } catch (e) {
+    // Ignore — player list may not be available yet
+  }
+}
+
 function startWatching() {
   if (watchInterval) return;
+  // Check immediately if GM is already online
+  checkIfGMOnline();
   watchInterval = setInterval(async () => {
     try {
       const tail = await api.readLogTail(15);
