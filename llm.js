@@ -35,8 +35,9 @@ If someone mentions a name you don't recognize, call list_online_players to find
 }
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const MODEL = process.env.LLM_MODEL || 'claude-sonnet-4-5';
+const MODEL = process.env.LLM_MODEL || 'claude-haiku-4-5-20251001';
 const AUTHORIZED_OP = process.env.AUTHORIZED_OP || '';
+const { tryMatch } = require('./llm/pattern-match');
 
 const BOT_IGN = process.env.BOT_NAME || '.bot';
 
@@ -312,22 +313,71 @@ function trimHistory() {
 // not the entire Claude API call + tool execution.
 let historyLock = Promise.resolve();
 
+// Resolve a nickname/name to the in-game name using NICKNAMES
+function resolvePlayerName(nameOrNick) {
+  const lower = (nameOrNick || '').toLowerCase();
+  // Check if it's already an exact in-game name
+  if (Object.keys(NICKNAMES).some(k => k.toLowerCase() === lower)) return nameOrNick;
+  // Check nicknames
+  for (const [ign, nick] of Object.entries(NICKNAMES)) {
+    if (nick.toLowerCase() === lower) return ign;
+  }
+  return nameOrNick;
+}
+
 async function handleChat(sender, message, opts = {}) {
   const isAuthorized = sender === AUTHORIZED_OP;
   const tag = opts.tag || '';
   const logPrefix = tag ? `[llm:${tag}]` : '[llm]';
 
-  // Snapshot HISTORY at the start so parallel requests each get a consistent
-  // view without blocking each other. The snapshot is read-only — each request
-  // builds its own working messages on top of it.
+  // --- PATTERN MATCHING: skip LLM for common commands (saves ~$0.03/call) ---
+  if (isAuthorized) {
+    const match = tryMatch(sender, message, resolvePlayerName);
+    if (match.matched) {
+      console.log(`${logPrefix} [pattern] ${match.tool}(${JSON.stringify(match.input).slice(0, 100)})`);
+      try {
+        let result;
+        // Try auto-discovered tools first, then low-level
+        const autoTool = toolsIndex.tools[match.tool];
+        if (autoTool) {
+          result = await autoTool.execute(match.input);
+        } else {
+          result = await executeTool(match.tool, match.input);
+        }
+        console.log(`${logPrefix} [pattern] -> ok=${result.ok}`);
+        // Generate a short reply without hitting the LLM
+        const reply = generatePatternReply(match.tool, match.input, result);
+        // Save to history
+        const userMsg = { role: 'user', content: `[${sender}] ${message}` };
+        historyLock = historyLock.then(() => {
+          HISTORY.push(userMsg);
+          HISTORY.push({ role: 'assistant', content: reply });
+          trimHistory();
+          saveHistory();
+        });
+        return reply;
+      } catch (e) {
+        console.error(`${logPrefix} [pattern] error:`, e.message);
+        // Fall through to LLM
+      }
+    }
+  }
+
+  // --- LLM PATH: for complex/ambiguous requests ---
   const historySnapshot = [...HISTORY];
   const userMsg = { role: 'user', content: `[${sender}] ${message}` };
-
-  // Working messages: snapshot + this request's user message
   const working = [...historySnapshot, userMsg];
 
   let finalText = null;
   const MAX_ITERS = 25;
+
+  // Build cached system prompt + tools for prompt caching
+  const systemBlocks = [
+    { type: 'text', text: getSystemPrompt(), cache_control: { type: 'ephemeral' } },
+  ];
+  const cachedTools = isAuthorized
+    ? TOOLS.map((t, i) => i === TOOLS.length - 1 ? { ...t, cache_control: { type: 'ephemeral' } } : t)
+    : [];
 
   for (let iter = 0; iter < MAX_ITERS; iter++) {
     let resp;
@@ -335,8 +385,8 @@ async function handleChat(sender, message, opts = {}) {
       resp = await anthropic.messages.create({
         model: MODEL,
         max_tokens: 4096,
-        system: getSystemPrompt(),
-        tools: isAuthorized ? TOOLS : [],
+        system: systemBlocks,
+        tools: cachedTools,
         messages: working,
       });
     } catch (e) {
@@ -386,6 +436,27 @@ async function handleChat(sender, message, opts = {}) {
   await historyLock;
 
   return finalText;
+}
+
+// Generate short replies for pattern-matched commands (no LLM needed)
+function generatePatternReply(tool, input, result) {
+  if (!result.ok) return `Hmm, that didn't work: ${result.error || 'unknown error'}`;
+  switch (tool) {
+    case 'kit': {
+      if (input.action === 'strip_all') return `Stripped all gear! You're naked now.`;
+      if (input.action === 'strip') return `Stripped the ${input.kit} kit.`;
+      return `${input.kit || 'Max'} kit equipped! ${result.slots_equipped} slots + ${result.items_given || 0} extra items.`;
+    }
+    case 'buff_debuff': {
+      if (input.type === 'clear') return `All effects cleared, back to normal!`;
+      if (input.type === 'buff') return `Buff level ${input.level} applied! ${result.effects_applied} effects, ${result.max_health} HP.`;
+      return `Debuff level ${input.level} applied! ${result.effects_applied} effects, ${result.max_health} HP. Good luck!`;
+    }
+    case 'leave_for_sleep': return `Heading out so you can sleep! Back in ~25s.`;
+    case 'get_server_stats': return `Server: ${result.state} | Memory: ${result.memory_used_mb}/${result.memory_plan_mb}MB (${result.memory_pct}%) | CPU: ${result.cpu_pct}% | Uptime: ${result.uptime_hours}h`;
+    case 'list_online_players': return `Online: ${result.players?.join(', ') || 'nobody'}`;
+    default: return `Done!`;
+  }
 }
 
 module.exports = { handleChat };
