@@ -55,14 +55,8 @@ async function buildPlatformAt(cx, cz, y, dimension) {
   await api.sendCommand(`${dp}forceload add ${cx - radius} ${cz - radius} ${cx + radius} ${cz + radius}`);
   await new Promise(r => setTimeout(r, 2000));
 
-  // Platform floor
+  // Platform floor (no walls — open viewing platform)
   await api.sendCommand(`${dp}fill ${cx - radius} ${y} ${cz - radius} ${cx + radius} ${y} ${cz + radius} ${PLATFORM_BLOCK}`);
-
-  // Glass walls (2 high)
-  await api.sendCommand(`${dp}fill ${cx - radius} ${y + 1} ${cz - radius} ${cx + radius} ${y + 2} ${cz - radius} ${PLATFORM_BLOCK}`);
-  await api.sendCommand(`${dp}fill ${cx - radius} ${y + 1} ${cz + radius} ${cx + radius} ${y + 2} ${cz + radius} ${PLATFORM_BLOCK}`);
-  await api.sendCommand(`${dp}fill ${cx - radius} ${y + 1} ${cz - radius} ${cx - radius} ${y + 2} ${cz + radius} ${PLATFORM_BLOCK}`);
-  await api.sendCommand(`${dp}fill ${cx + radius} ${y + 1} ${cz - radius} ${cx + radius} ${y + 2} ${cz + radius} ${PLATFORM_BLOCK}`);
 
   await api.sendCommand(`${dp}forceload remove all`);
 
@@ -197,8 +191,8 @@ async function onPlayerJoin(playerName) {
   if (playerName === GM_PLAYER || playerName === GM_PLAYER.replace(/^\./, '')) {
     await new Promise(r => setTimeout(r, 1500));
     await teleportGMToPlatform();
-    await api.sendCommand(`gamemode creative ${GM_PLAYER}`);
-    await api.sendCommand(`effect give ${GM_PLAYER} minecraft:resistance infinite 4 true`);
+    // No creative mode — GM plays in survival. Just resistance so they don't die from fall damage on tp.
+    await api.sendCommand(`effect give ${GM_PLAYER} minecraft:resistance 10 4 true`);
   }
 }
 
