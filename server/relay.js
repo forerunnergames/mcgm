@@ -64,4 +64,18 @@ function readResponse(id) {
   } catch { return null; }
 }
 
-module.exports = { pushMessage, readQueue, clearQueue, writeResponse, readResponse };
+/**
+ * Push an in-game chat message to the queue.
+ * Same as pushMessage but tagged with source.
+ */
+function pushChat(sender, message) {
+  ensureDir();
+  let queue = [];
+  try { queue = JSON.parse(fs.readFileSync(QUEUE_FILE, 'utf8')); } catch {}
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  queue.push({ id, sender, message, source: 'ingame', timestamp: new Date().toISOString() });
+  fs.writeFileSync(QUEUE_FILE, JSON.stringify(queue, null, 2));
+  return id;
+}
+
+module.exports = { pushMessage, pushChat, readQueue, clearQueue, writeResponse, readResponse };

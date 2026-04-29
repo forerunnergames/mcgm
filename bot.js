@@ -17,6 +17,7 @@ const { setLeaveAndRejoinHandler } = require('./control');
 const server = require('./server');
 const gamemaster = require('./server/gamemaster');
 const deathTracker = require('./server/death-tracker');
+const relay = require('./server/relay');
 
 // Chat log file — appends every message and tool call for debugging
 const LOG_DIR = path.join(__dirname, 'logs');
@@ -160,6 +161,18 @@ async function handleEvent(evt) {
 
       console.log(`[chat] <${sender}> ${message}`);
       chatLog(`IN-GAME <${sender}> ${message}`);
+
+      // In relay mode, queue the message for Claude Code instead of the LLM.
+      // Pattern-matched commands still run locally for instant response.
+      const { tryMatch } = require('./llm/pattern-match');
+      const match = tryMatch(sender, message, n => n);
+      if (!match.matched) {
+        // Not pattern-matchable — relay to Claude Code
+        relay.pushChat(sender, message);
+        console.log(`[chat] relayed to Claude Code: <${sender}> ${message}`);
+        return;
+      }
+
       // Serialize chat processing so two fast messages don't interleave tool calls
       chatQueue = chatQueue
         .then(() => processChat(sender, message))

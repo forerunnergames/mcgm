@@ -20,7 +20,8 @@ const { runCommand } = require('./server');
 const relay = require('./server/relay');
 
 // Relay mode: when true, phone messages go to Claude Code instead of the LLM.
-let relayMode = false;
+// Default ON to avoid API costs — Claude Code handles complex requests.
+let relayMode = true;
 
 // Dedupe: tracks messages we just echoed to in-game chat so bot.js can drop
 // them when they come back via the Go transport's chat event stream.
